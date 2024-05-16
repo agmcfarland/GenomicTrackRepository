@@ -1,4 +1,3 @@
-
 # Script to generate DNaseI track for hg38 genome
 # https://genome.ucsc.edu/cgi-bin/hgTables?db=hg38&hgta_group=regulation&hgta_track=wgEncodeRegDnase&hgta_table=wgEncodeRegDnaseUwTh1Peak&hgta_doSchema=describe+table+schema
 
