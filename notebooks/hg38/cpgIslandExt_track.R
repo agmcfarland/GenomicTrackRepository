@@ -19,7 +19,6 @@ system(
 df_raw_table <- vroom::vroom(file = file.path(project_paths$data_raw, 'cpgIslandExt.txt.gz'), col_names = FALSE, delim = '\t')
 colnames(df_raw_table) <- c("bin", "chrom", "chromStart", "chromEnd", "name", "length", "cpgNum", "gcNum", "perCpg", "perGc", "obsExp")
 
-
 df_raw_table <- df_raw_table %>%
   dplyr::filter(!stringr::str_detect(chrom, '_random|_alt|chrUn|_fix')) %>%
   dplyr::mutate(strand = '*') %>%

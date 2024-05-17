@@ -16,9 +16,16 @@ project_paths <- build_project_paths(project_dir)
 
 ```{r}
 
-aavenger_sites <- vroom::vroom(file.path(project_paths$data_raw, 'RivellaHeatMapSites.tsv.gz')) %>%
+aavenger_sites <- vroom::vroom(file.path(project_paths$data_raw, 'Rivella_20240516.tsv.gz')) %>%
+  dplyr::mutate(sampleName = patient)
+
+print(aavenger_sites %>% dplyr::filter(is.na(sampleName)) %>% nrow())
+
+raw_count <- print(nrow(aavenger_sites))
+
+aavenger_sites <- aavenger_sites %>%
   # dplyr::filter(is.na(start))
-  dplyr::filter(!stringr::str_detect(seqnames, 'chrUn')) %>%
+  dplyr::filter(!stringr::str_detect(seqnames, 'chrUn|_alt|_random')) %>% # removes 168 sites
   dplyr::mutate(
     trial = '',
     subject = sampleName,
@@ -26,6 +33,7 @@ aavenger_sites <- vroom::vroom(file.path(project_paths$data_raw, 'RivellaHeatMap
   InvestigateIntegrations::format_aavenger_sites() %>%
   dplyr::filter(!is.na(start))
 
+print(paste0('Number of sites removed: ', raw_count - nrow(aavenger_sites)))
 
 chromosome_lengths <- InvestigateIntegrations::example_hg38_chromosome_lengths
 
@@ -42,7 +50,7 @@ print(head(random_match_df))
 combined_df <- rbind(aavenger_sites, random_match_df)
 
 # get the provided RData and rds feature files into a list
-feature_files_to_process <- list.files(file.path(project_paths$data_processed, 'hg38'), pattern = ".rds", full.names = TRUE)
+feature_files_to_process <- list.files(file.path(project_paths$data_processed, 'hg38'), pattern = "cpgIslandExt.rds|ncbiRefSeqCurated_transcription_start.rds|ncbiRefSeqCurated_transcription.rds|wgEncodeRegDnaseClustered.rds", full.names = TRUE)
 
 print(feature_files_to_process)
 
@@ -50,7 +58,7 @@ print(feature_files_to_process)
 combined_overlap_test_results_genomic_ranges <- InvestigateIntegrations::test_for_overlaps(
   matched_aavenger_sites_df = combined_df,
   list_of_feature_files = feature_files_to_process,
-  overlap_ranges_to_test = c(0, 1000, 10000, 1000000)
+  overlap_ranges_to_test = c(0, 1000, 10000, 100000, 1000000)
 )
 
 print(head(combined_overlap_test_results_genomic_ranges))
@@ -59,52 +67,101 @@ hot_roc_result <- InvestigateIntegrations::hotroc_compare_insertion_to_match(
   matched_overlap_df = combined_overlap_test_results_genomic_ranges
   )
 
-p1 <- InvestigateIntegrations::roc_to_heatmap(
-  hot_roc_result = hot_roc_result
+# GC content needs to be processed slightly differently. only window sizes of 0 are used since windows are already precalculated in the track itself
+gc_content_feature_files_to_process <- list.files(file.path(project_paths$data_processed, 'hg38'), pattern = "gc_content", full.names = TRUE)
+
+combined_overlap_test_results_genomic_ranges_gc_content <- InvestigateIntegrations::test_for_overlaps(
+  matched_aavenger_sites_df = combined_df,
+  list_of_feature_files = gc_content_feature_files_to_process,
+  overlap_ranges_to_test = c(0)
 )
 
-print(p1)
+# manually change window to reflect that included in the filename
+hot_roc_result_gc <- InvestigateIntegrations::hotroc_compare_insertion_to_match(
+  matched_overlap_df = combined_overlap_test_results_genomic_ranges_gc_content
+  )
 ```
 
 # reformmated
 
-```{r}
+```{r, fig.asp=1, fig.width=8}
 
-hot_roc_result_mod <- InvestigateIntegrations::format_hot_roc_result(hot_roc_result) %>%
+experimental_subject_order <- c("ALS17.1", "ALS17.2", "ALS17.3", "ALS20.1", "ALS20.2", "ALS20.3", "BB305.1", "BB305.2", "BB305.3",
+                   "CHOP.1.D0", "CHOP.1.D14", "210410091.D0",  "210410091.D14","R003850.D0", "R003850.D14", "R003851.D0", "R003851.D14",
+                   "WAS1", "WAS2", "WAS3", "CGD1", "CGD2", "CGD3", "CGD4")
+
+hot_roc_result_mod <- InvestigateIntegrations::format_hot_roc_result(hot_roc_result)
+hot_roc_result_mod_gc <- InvestigateIntegrations::format_hot_roc_result(hot_roc_result_gc) %>%
+  dplyr::mutate(
+    feature_window_2 = sub(".*_(.*)\\.rds.*", "\\1", feature_window),
+    feature_window = paste0('gc_content.rds.', feature_window_2)
+    ) %>%
+  dplyr::select(-feature_window_2)
+
+hot_roc_result_mod <- rbind(
+  hot_roc_result_mod,
+  hot_roc_result_mod_gc
+  ) %>%
   dplyr::mutate(
     experimental_subject = stringr::str_replace_all(heatmap_group, 'X_', ''),
     experimental_subject = stringr::str_replace_all(experimental_subject, '_', ''),
     experimental_subject_factor = factor(
       experimental_subject, 
-      levels = c('CHOP.1.D0', 'CHOP.1.D14', '210410091.D0', '210410091.D14', 'R003850.D0', 'R003850.D14', 'R003851.D0', 'R003851.D14', 'WAS1', 'WAS2', 'WAS3', 'CGD1', 'CGD2', 'CGD3', 'CGD4')) 
+      levels = experimental_subject_order
+      )
     ) %>%
   dplyr::mutate(
     window = sapply(feature_window, function(x) {stringr::str_split(x, '\\.')[[1]][3]}),
     window = as.integer(window),
     feature = sapply(feature_window, function(x) {stringr::str_split(x, '\\.')[[1]][1]}),
     feature_short = dplyr::case_when(
+      feature == 'cpgIslandExt' ~ 'CpG',
       feature == 'ncbiRefSeqCurated_transcription' ~ 'RefSeqGene',
       feature == 'ncbiRefSeqCurated_transcription_start' ~ 'TSS',
       feature == 'wgEncodeRegDnaseClustered' ~ 'DNaseI',
-      TRUE ~ 'lookatme'
+      TRUE ~ 'GC'
     ),
-    feature_short_factor = factor(feature_short, c('DNaseI', 'RefSeqGene', 'TSS'))
+    feature_short_factor = factor(feature_short, c('DNaseI', 'CpG', 'GC', 'RefSeqGene', 'TSS'))
   ) %>%
   dplyr::arrange(feature_short_factor, dplyr::desc(window)) %>%
   dplyr::mutate(
-    window_factor = factor(as.character(window), levels = base::unique(as.character(window))),
+    window_factor = dplyr::case_when(
+      window == 0 ~ '0',
+      window == 100 ~ '100',
+      window == 1000 ~ '1K',
+      window == 10000 ~ '10K',
+      window == 100000 ~ '100K',
+      window == 1000000 ~ '1M',
+      TRUE ~ 'lookatme'
+    ),
+    window_factor = factor(window_factor, levels = rev(c('0', '100', '1K', '10K', '100K', '1M'))),
+    # window_factor = factor(as.character(window), levels = base::unique(as.character(window))),
     feature_window_factor = factor(feature_window, levels = base::unique(feature_window)))
+
+
+hot_roc_result_mod <- hot_roc_result_mod %>%
+  dplyr::mutate(
+    comparison_group = dplyr::case_when(
+      experimental_subject %in% experimental_subject_order[1:9] ~ 'group1',
+      experimental_subject %in% experimental_subject_order[10:17] ~ 'group2',
+      experimental_subject %in% experimental_subject_order[18:24] ~ 'group3',
+      TRUE ~ 'lookatme'
+    ),
+    comparison_group_factor = factor(comparison_group, levels = c('group1', 'group2', 'group3'))
+  )
 
 hot_roc_result_mod <- hot_roc_result_mod %>%
   dplyr::filter(
-    !(window > 0 & stringr::str_detect(feature_short_factor, 'TSS'))
+    !(window > 1000 & stringr::str_detect(feature_short_factor, 'TSS')),
+    !(window < 1000 & stringr::str_detect(feature_short_factor, 'DNaseI')),
+    !(window < 1000 & stringr::str_detect(feature_short_factor, 'CpG')),
   )
   
-ggplot(hot_roc_result_mod, aes(y = feature_window_factor, x = experimental_subject_factor, fill = ROC_value)) +
-  ggh4x::facet_nested(feature_short_factor + window_factor ~ ., scales = 'free', space = 'fixed', switch = 'y') +
+p1 <- ggplot(hot_roc_result_mod, aes(y = feature_window_factor, x = experimental_subject_factor, fill = round(ROC_value, 2))) +
+  ggh4x::facet_nested(feature_short_factor + window_factor ~ comparison_group_factor, scales = 'free', space = 'free', switch = 'y') +
   geom_tile(color = 'black', width = 0.95, height = 0.95) + 
   geom_text(aes(label = sig_p_value), nudge_y = 0) +
-  geom_text(aes(label = round(ROC_value, 2)), nudge_y = -0.2, size = 2.5) +
+  # geom_text(aes(label = round(ROC_value, 2)), nudge_y = -0.25, size = 2.5, color = 'black') +
   coord_cartesian(clip = 'off') +
   # colors
   scale_fill_gradientn(colours = c("blue", "white", "red"), 
@@ -114,6 +171,7 @@ ggplot(hot_roc_result_mod, aes(y = feature_window_factor, x = experimental_subje
                        limits = c(0, 1)) +
   theme_classic() +
   theme(
+    # aspect.ratio = 1,
     strip.text.y.left = element_text(angle = 0),
     strip.clip = 'off',
     axis.ticks.y = element_blank(),
@@ -122,38 +180,13 @@ ggplot(hot_roc_result_mod, aes(y = feature_window_factor, x = experimental_subje
     axis.title = element_blank()
   )
 
-# 
-#   # geom_text(aes(label = sig_p_value), nudge_y = 0) +
-#   # geom_text(aes(label = round(ROC, 2)), nudge_y = -0.2, size = 2.5) +
-#   theme_classic() +
-#   theme(
-#     # strip placement y
-#     strip.text.y.left = element_text(vjust = 1.1, hjust = 1, angle = 0, face = 'bold', margin = margin(t = -1, r = 0)),
-#     # strip placement x
-#     strip.text.x.bottom = element_text(vjust = 1, angle = 0, face = 'bold', margin = margin(t = 10)),
-#     axis.text.x = element_text(vjust = 12), # lower moves text down down
-#     axis.title.x = element_text(vjust = 6),
-#     axis.line.x = element_blank(),
-#     axis.ticks.x = element_blank(),
-#     # strip background
-#     strip.background = element_blank(),
-#     # y axis placement
-#     axis.text.y = element_text(margin = margin(r = -70)), 
-#     axis.ticks.y = element_blank(),
-#     axis.title.y = element_text(margin = margin(r = 45)), 
-#     axis.line.y = element_blank(),
-#     # plot size (more area to left of plot to account for custom y axis positioning)
-#     plot.margin = unit(c(1, 1, 1, 2), 'cm'),
-#     strip.clip = 'off' # wow
-#   ) +
-#   coord_cartesian(clip = 'off') +
-#   # colors
-#   scale_fill_gradientn(colours = c("blue", "white", "brightred"), 
-#                        na.value = "transparent", 
-#                        breaks = c(0, 0.25, 0.5, 0.75, 1), 
-#                        labels = c(0, 0.25, 0.5, 0.75, 1), 
-#                        limits = c(0, 1)) +
-#   # plot labels
-#   labs(x = 'sample and vector number', y = 'genomic feature and\nwindow size (bp)')
+cowplot::save_plot(
+  filename = file.path(project_paths$data_raw, 'updated_example_heatmap.pdf'),
+  plot = p1,
+  base_asp = 0.5,
+  base_width = 10,
+  base_height = 15
+)
+
 ```
 
