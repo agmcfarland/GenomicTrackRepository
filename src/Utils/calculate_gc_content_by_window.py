@@ -12,6 +12,9 @@ def chunk_sequence(sequence, window_size):
 	return [sequence[i:i + window_size] for i in range(0, len(sequence), window_size)]
 
 def ignore_record(record_id):
+	"""
+	Chromosome names (records) that are non-standard are set as ignored via True/False.
+	"""
 	for i in ['chrUn', '_fix', '_alt', '_random']:
 		if record_id.find(i) > -1:
 			return True
@@ -39,9 +42,9 @@ def main(genomic_fasta_file_path: str, output_file_path: str, window_size: int):
 			g_count = genomic_window_.count('G')
 
 			try:
-				gc_percentage = (c_count + g_count) / (a_count + t_count + c_count + g_count) * 100
+				gc_percentage = (c_count + g_count) / (a_count + t_count + c_count + g_count) * 100 # Don't divide by length but by counts of A,C,T,G because of Ns.
 			except ZeroDivisionError:
-				gc_percentage = 0  # Case where it's all Ns
+				gc_percentage = 0  # Case denominator is all Ns
 
 			end_window = start_window + window_size - 1
 
