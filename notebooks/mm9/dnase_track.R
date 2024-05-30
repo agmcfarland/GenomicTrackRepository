@@ -1,4 +1,4 @@
-# Script to generate DNaseI track for hg38 genome
+# Script to generate DNaseI track for mm9 genome
 # https://genome.ucsc.edu/cgi-bin/hgTables?db=hg38&hgta_group=regulation&hgta_track=wgEncodeRegDnase&hgta_table=wgEncodeRegDnaseUwTh1Peak&hgta_doSchema=describe+table+schema
 
 rm(list = ls())
@@ -10,9 +10,11 @@ invisible(suppressMessages(sapply(list.files(file.path(project_dir, 'src', 'Rlib
 
 project_paths <- build_project_paths(project_dir)
 
+genome_assembly <- 'mm9'
+
 system(
   command = paste0(
-    'rsync', ' -avzP', ' rsync://hgdownload.cse.ucsc.edu/goldenPath/hg38/database/wgEncodeRegDnaseClustered.txt.gz', ' ', project_paths$data_raw
+    'rsync', ' -avzP', ' rsync://hgdownload.cse.ucsc.edu/goldenPath/mm9/database/wgEncodeRegDnaseClustered.txt.gz', ' ', project_paths$data_raw
   )
 )
 
