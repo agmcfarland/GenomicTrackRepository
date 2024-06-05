@@ -49,3 +49,28 @@ grange_raw_table <- df_raw_table %>%
 saveRDS(grange_raw_table, file = file.path(project_paths$data_processed, 'hg38', 'ncbiRefSeqCurated_transcription_start.rds'))
 
 
+# Transcription start and stop
+grange_raw_table <- df_raw_table %>%
+  dplyr::select(txStart, txEnd, chrom, name, name2) %>%
+  dplyr::mutate(strand = '*') %>%
+  dplyr::rename(
+    start = txStart,
+    end = txEnd
+  ) %>%
+  GenomicRanges::makeGRangesFromDataFrame(keep.extra.columns = TRUE) %>%
+  IRanges::reduce()
+
+saveRDS(grange_raw_table, file = file.path(project_paths$data_processed, 'hg38', 'ncbiRefSeqCurated_transcription_reduced.rds'))
+
+# Transcription start site
+grange_raw_table <- df_raw_table %>%
+  dplyr::select(txStart, txEnd, chrom, strand, name, name2) %>%
+  dplyr::mutate(
+    start = ifelse(strand == '+', txStart, txEnd),
+    end = start + 1) %>%
+  dplyr::select(-c(txStart, txEnd)) %>%
+  GenomicRanges::makeGRangesFromDataFrame(keep.extra.columns = TRUE)
+
+saveRDS(grange_raw_table, file = file.path(project_paths$data_processed, 'hg38', 'ncbiRefSeqCurated_transcription_start_reduced.rds'))
+
+
