@@ -16,13 +16,13 @@ chromatin_data <- data.frame(
   epigenetic_mark = c("H3K4me3", #"H3K36me3", #"H3K27me3", 
                       "H3K27ac", "H3K9ac", "H3K4me1", "H3K9me3", "H3K4me2", "H3K27me3", "H3K36me3", "H4K20me1", "H2AFZ", "H3K79me2"),
   database_path = c(
-    "https://www.encodeproject.org/files/ENCFF903JDG/@@download/ENCFF903JDG.bed.gz",
-    # "https://www.encodeproject.org/files/ENCFF348FNV/@@download/ENCFF348FNV.bed.gz",
-    # "https://www.encodeproject.org/files/ENCFF428MSN/@@download/ENCFF428MSN.bed.gz",
-    "https://www.encodeproject.org/files/ENCFF831XSS/@@download/ENCFF831XSS.bed.gz",
-    "https://www.encodeproject.org/files/ENCFF021PYM/@@download/ENCFF021PYM.bed.gz",
-    "https://www.encodeproject.org/files/ENCFF162RSB/@@download/ENCFF162RSB.bed.gz",
-    "https://www.encodeproject.org/files/ENCFF872YCK/@@download/ENCFF872YCK.bed.gz",
+    "https://www.encodeproject.org/files/ENCFF903JDG/@@download/ENCFF903JDG.bed.gz", #1
+    # "https://www.encodeproject.org/files/ENCFF348FNV/@@download/ENCFF348FNV.bed.gz",#2
+    # "https://www.encodeproject.org/files/ENCFF428MSN/@@download/ENCFF428MSN.bed.gz",#3
+    "https://www.encodeproject.org/files/ENCFF831XSS/@@download/ENCFF831XSS.bed.gz",#4
+    "https://www.encodeproject.org/files/ENCFF021PYM/@@download/ENCFF021PYM.bed.gz",#5
+    "https://www.encodeproject.org/files/ENCFF162RSB/@@download/ENCFF162RSB.bed.gz",#6
+    "https://www.encodeproject.org/files/ENCFF872YCK/@@download/ENCFF872YCK.bed.gz",#7
     "https://www.encodeproject.org/files/ENCFF429OQI/@@download/ENCFF429OQI.bed.gz",
     "https://www.encodeproject.org/files/ENCFF584RYA/@@download/ENCFF584RYA.bed.gz",
     "https://www.encodeproject.org/files/ENCFF582MED/@@download/ENCFF582MED.bed.gz",

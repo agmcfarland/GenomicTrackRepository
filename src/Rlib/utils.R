@@ -129,3 +129,24 @@ list_installed_R_packages <- function(list_namespace_only = FALSE) {
 }
 
 
+convert_to_days <- function(time_vector) {
+  # Apply the conversion to each element in the vector
+  sapply(time_vector, function(time_string) {
+    # Extract the time unit (last character) and numeric value
+    unit <- substring(time_string, 1, 1)
+    value <- as.numeric(substring(time_string, 2))
+    
+    # Convert based on the unit
+    if (unit == "M") {
+      return(value * 30)        # Convert months to days
+    } else if (unit == "Y") {
+      return(value * 365)       # Convert years to days
+    } else if (unit == "D") {
+      return(value)             # Days remain as is
+    } else if (unit == "W") {
+      return(value * 7)         # Convert weeks to days
+    } else {
+      return(NA)                # Return NA if unrecognized format
+    }
+  })
+}
