@@ -1,10 +1,8 @@
 Alex McFarland
 
-09/19/2024
+10/22/2024
 
 # Background
-
-EL03
 
 ```sh
 PROJECT_PATH="/data/GenomicTrackRepository"
@@ -20,6 +18,8 @@ import os
 import pandas as pd
 from os.path import join as pjoin
 import glob
+import gzip
+from Bio import SeqIO
 from src.ProjectPaths import ProjectPaths
 
 pd.set_option('display.max_columns', None)
@@ -84,6 +84,7 @@ df_metadata = pd.DataFrame({
     "int_site_exp": [1, 5, 6, 6, 6, 7, 7, 7]
 })
 
+df_metadata['raw_data_local'] = df_metadata.apply(lambda x: pjoin(project_paths.paths['data_raw_sequencing'], x['run_ID']), axis = 1)
 
 print(df_metadata)
 ```
@@ -91,19 +92,99 @@ print(df_metadata)
 
 # Copy data from microb120 to aws
 
+Copying the sample sheet from Vincent Wu's project directory. At the moment no int6_data csv metadata is in his folder.
+
+Manually populated folders for int6_data from emails on 10/22/24
+
 ```python
-for _, run_ in df_metadata.iterrows():break
+for _, run_ in df_metadata.iterrows():
 
-	os.system(f"scp agmcfarland@microb120.med.upenn.edu:{run_.fastq_path_microb120}/*fastq.gz {project_paths.paths['data_raw_sequencing']}")
+	os.makedirs(run_.raw_data_local, exist_ok = True)
 
-	
+	os.system(f"scp agmcfarland@microb120.med.upenn.edu:{run_.fastq_path_microb120}/*fastq.gz {run_.raw_data_local}")
 
-
+	os.system(f"scp agmcfarland@microb120.med.upenn.edu:{run_.fastq_path_microb120}/*.csv {run_.raw_data_local}")
 ```
+
 
 # Gather run metadata
 
 ```python
+sample_sheet_supplemental = []
+
+sample_sheet_raw_path = []
+
+for _, run_ in df_metadata.iterrows():
+
+	for f in glob.glob(pjoin(run_.raw_data_local, '*.csv')):
+		if f.endswith('.supp.csv'):
+			sample_sheet_supplemental.append(f)
+		else:
+			sample_sheet_raw_path.append(f)
+
+df_metadata['sample_sheet_raw_path'] = 	sample_sheet_raw_path
+
+df_metadata['sample_sheet_supplemental_path'] = sample_sheet_supplemental
+```
+
+# Check how well hmm works
+
+```python
+
+for _, run_ in df_metadata.iterrows():break
+
+	with gzip.open(pjoin(run_.raw_data_local, 'Undetermined_S0_R2_001.fastq.gz'), 'rb') as input_handle:
+		for record in input_handle:
+
+	for f in glob.glob(pjoin(run_.raw_data_local, '*.csv')):
+		if f.endswith('.supp.csv'):
+			sample_sheet_supplemental.append(f)
+		else:
+			sample_sheet_raw_path.append(f)
+
+df_metadata['sample_sheet_raw_path'] = 	sample_sheet_raw_path
+
+df_metadata['sample_sheet_supplemental_path'] = sample_sheet_supplemental
+```
+
+# Make complete metadata sheet for aavenger
+
+```python
+for _, run_ in df_metadata.iterrows():break
+	
+	sample_sheet_raw = pd.read_csv(run_.sample_sheet_raw_path)
+
+	sample_sheet_raw['sample'] = sample_sheet_raw['sampleName']
+
+	sample_sheet_raw['subject'] = sample_sheet_raw['sample'].apply(lambda x: x.split('-')[0])
+
+	sample_sheet_raw['replicate'] = sample_sheet_raw['sample'].apply(lambda x: x.split('-')[1]).astype(int)
+
+	sample_sheet_raw['trial'] = run_.run_ID
+
+	sample_sheet_raw['vectorFastaFile'] = 'HXB2.fasta'
+	
+	sample_sheet_raw['flags'] = sample_sheet_raw['uniqueRegion'].apply(lambda x: 'IN_u5' if x.find('U5') > -1 else 'IN_u3')
+	
+	sample_sheet_raw['leaderSeqHMM'] = sample_sheet_raw['uniqueRegion'].apply(lambda x: 'HIV1_1-100_U5.hmm' if x.find('U5') > -1 else 'HIV1_1-100_U3_RC.hmm')
+	
+	sample_sheet_raw['adriftReadLinkerSeq'] = sample_sheet_raw['barcode1']
+
+	sample_sheet_raw['index1Seq'] = sample_sheet_raw['barcode2']
+
+	sample_sheet_raw['refGenome'] = 'hs1'
+
+	sample_sheet_completed = sample_sheet_raw[~sample_sheet_raw['sample'].str.contains('infected')]
+
+	sample_sheet_completed = sample_sheet_completed[~sample_sheet_completed['sample'].str.contains('emplate')]
+
+	sample_sheet_completed = sample_sheet_raw[['trial', 'subject', 'sample', 'replicate', 'adriftReadLinkerSeq', 'index1Seq', 'refGenome', 'vectorFastaFile', 'leaderSeqHMM', 'flags']]
+
+```
+
+
+
+
 df_run_metadata = pd.read_csv(pjoin(project_paths.paths['data_processed'], '0_process_aavenger_runs', 'aavenger_run_metadata.csv'))
 
 df_run_metadata = df_run_metadata[df_run_metadata['run_id'] == illumina_run_id]
