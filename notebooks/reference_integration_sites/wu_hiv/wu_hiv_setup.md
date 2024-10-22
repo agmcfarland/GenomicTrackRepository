@@ -50,11 +50,12 @@ project_paths.add_path(
 	path = pjoin(project_paths.paths['data_processed'], 'reference_integration_sites', analysis_name)
 	)
 os.makedirs(project_paths.paths['anaylsis_processed'], exist_ok = True)
+
+aavenger_dir = '/data/AAVengeR'
 ```
 
 # Add metadata to raw folder
 
-import pandas as pd
 ```python
 
 df_metadata = pd.DataFrame({
@@ -85,6 +86,11 @@ df_metadata = pd.DataFrame({
 })
 
 df_metadata['raw_data_local'] = df_metadata.apply(lambda x: pjoin(project_paths.paths['data_raw_sequencing'], x['run_ID']), axis = 1)
+
+
+df_metadata['interim_data_local'] = df_metadata.apply(lambda x: pjoin(project_paths.paths['analysis_interim'], x['run_ID']), axis = 1)
+
+df_metadata['processed_data_local'] = df_metadata.apply(lambda x: pjoin(project_paths.paths['anaylsis_processed'], x['run_ID']), axis = 1)
 
 print(df_metadata)
 ```
@@ -129,12 +135,28 @@ df_metadata['sample_sheet_supplemental_path'] = sample_sheet_supplemental
 
 # Check how well hmm works
 
+HIV-1 PCR2 (U3), 
+
+CAAGCAGAAGACGGCATACGAGATBARCODEAGTCAGTCAGCCCAGGGAAGTAGC CTTGTGTGTGGT
+
+CTTGTGTG -- primer tip
+
+HIV-1 PCR2 (U5), 
+
+CAAGCAGAAGACGGCATACGAGATBARCODEAGTCAGTCAGCCCAAGTAGTGTGTGCCC GTCTGTTG
+
+GTCTGTTG -- primer tip
+
+Using default AAVengeR HMMs and settings for wild HIV
+
 ```python
 
 for _, run_ in df_metadata.iterrows():break
 
-	with gzip.open(pjoin(run_.raw_data_local, 'Undetermined_S0_R2_001.fastq.gz'), 'rb') as input_handle:
-		for record in input_handle:
+	with gzip.open(pjoin(run_.raw_data_local, 'Undetermined_S0_R2_001.fastq.gz'), 'rt') as input_handle:
+		store_record = []
+		for record in SeqIO.parse(input_handle, 'fastq'):
+			store_record.append(record)
 
 	for f in glob.glob(pjoin(run_.raw_data_local, '*.csv')):
 		if f.endswith('.supp.csv'):
@@ -145,20 +167,66 @@ for _, run_ in df_metadata.iterrows():break
 df_metadata['sample_sheet_raw_path'] = 	sample_sheet_raw_path
 
 df_metadata['sample_sheet_supplemental_path'] = sample_sheet_supplemental
+
+
+u3_records = []
+for record in store_record:
+	if str(record.seq).startswith('CTTGTGTGTGGT'):
+		u3_records.append(record)
+
+u3_first_x_bp = []
+for record in u3_records:
+	u3_first_x_bp.append(str(record.seq)[:100])
+
+
+for record in u3_records:
+	if str(record.seq).find('CCCTTCCA')
+
+
+with open(pjoin(project_paths.paths['analysis_interim'], 'U3_subset.fasta'), 'wt') as outfile:
+	for record in u3_records:
+		outfile.write(f'>{record.description}\n{str(record.seq)}\n')
+
+os.system(f"nhmmer --cpu 8 --max --tblout {pjoin(project_paths.paths['analysis_interim'], 'U3_subset.tsv')} {pjoin(aavenger_dir, 'data/hmms', 'HIV1_1-100_U3_RC.hmm')} {pjoin(project_paths.paths['analysis_interim'], 'U3_subset.fasta')} > {pjoin(project_paths.paths['analysis_interim'], 'U3_subset.stdout')}")
+
+
+u5_records = []
+for record in store_record:
+	if str(record.seq).startswith('GTCTGTTG'):
+		u5_records.append(record)
+
+u5_first_x_bp = []
+for record in u5_records:
+	u5_first_x_bp.append(str(record.seq)[:100])
+
+with open(pjoin(project_paths.paths['analysis_interim'], 'u5_subset.fasta'), 'wt') as outfile:
+	for record in u5_records:
+		outfile.write(f'>{record.description}\n{str(record.seq)}\n')
+
+os.system(f"nhmmer --cpu 8 --max --tblout {pjoin(project_paths.paths['analysis_interim'], 'u5_subset.tsv')} {pjoin(aavenger_dir, 'data/hmms', 'HIV1_1-100_U5.hmm')} {pjoin(project_paths.paths['analysis_interim'], 'u5_subset.fasta')} > {pjoin(project_paths.paths['analysis_interim'], 'u5_subset.stdout')}")
+
 ```
 
 # Make complete metadata sheet for aavenger
 
 ```python
-for _, run_ in df_metadata.iterrows():break
+for _, run_ in df_metadata.iterrows():
+
+	sample_info = pd.read_csv(run_.sample_sheet_supplemental_path)
+
+	sample_info = sample_info.rename(columns = {'specimen': 'subject'})
 	
 	sample_sheet_raw = pd.read_csv(run_.sample_sheet_raw_path)
 
 	sample_sheet_raw['sample'] = sample_sheet_raw['sampleName']
 
-	sample_sheet_raw['subject'] = sample_sheet_raw['sample'].apply(lambda x: x.split('-')[0])
+	# remove uninfected and no template controls
+	sample_sheet_raw = sample_sheet_raw[~sample_sheet_raw['sample'].str.contains('infected|emplate|UNC|NTC')]
 
-	sample_sheet_raw['replicate'] = sample_sheet_raw['sample'].apply(lambda x: x.split('-')[1]).astype(int)
+	sample_sheet_raw['subject_1'] = sample_sheet_raw['sample'].apply(lambda x: x.split('-')[0])	
+
+	# Group by the two columns and assign IDs 
+	sample_sheet_raw['replicate'] = sample_sheet_raw.groupby(['subject_1', 'uniqueRegion']).cumcount() + 1 #% 4 + 1
 
 	sample_sheet_raw['trial'] = run_.run_ID
 
@@ -174,16 +242,120 @@ for _, run_ in df_metadata.iterrows():break
 
 	sample_sheet_raw['refGenome'] = 'hs1'
 
-	sample_sheet_completed = sample_sheet_raw[~sample_sheet_raw['sample'].str.contains('infected')]
+	# Add metadata
 
-	sample_sheet_completed = sample_sheet_completed[~sample_sheet_completed['sample'].str.contains('emplate')]
+	shape_prior_to_merge = sample_sheet_raw.shape
 
-	sample_sheet_completed = sample_sheet_raw[['trial', 'subject', 'sample', 'replicate', 'adriftReadLinkerSeq', 'index1Seq', 'refGenome', 'vectorFastaFile', 'leaderSeqHMM', 'flags']]
+	sample_sheet_completed = sample_sheet_raw.merge(
+		sample_info,
+		left_on = 'subject_1',
+		right_on = 'subject',
+		how = 'outer'
+		)
 
+	# expect no samples weren't lost or gained when merging metadata
+	assert shape_prior_to_merge[0] == sample_sheet_completed.shape[0]
+
+	# subset just columns used by AAVengeR
+
+	sample_sheet_completed = sample_sheet_completed[['trial', 'subject', 'sample', 'replicate', 'adriftReadLinkerSeq', 'index1Seq', 'refGenome', 'vectorFastaFile', 'leaderSeqHMM', 'flags']]
+
+	# expect each sample to have four replicates each for U3 and U5
+	assert(len(sample_sheet_completed)/4//2 == len(sample_sheet_completed['subject'].unique()))
+
+	# expect all sample names to be unique
+
+	assert(len(sample_sheet_completed['sample'].unique()) == len(sample_sheet_completed['sample'].tolist()))
+
+	sample_sheet_completed.to_csv(pjoin(run_.raw_data_local, 'CompletedSampleSheet.tsv'), sep = '\t', index = None)
 ```
 
 
+# Make config file
 
+Manually added config file to external data. Added time stamp for reference.
+
+```python
+production_config = pjoin(project_paths.paths['data_external'], 'production_config_20241022.yml')
+
+for _, run_ in df_metadata.iterrows():
+
+	config_file_completed = pjoin(run_.raw_data_local, 'CompletedConfigFile.yml')
+
+	with open(config_file_completed, 'w') as outfile:
+
+		with open(production_config, 'r') as infile:
+
+			for l in infile:
+
+				if l.startswith('outputDir'):
+					outfile.write(f"outputDir: {run_.processed_data_local}\n")
+
+				elif l.startswith('sequencingRunID'):
+					outfile.write(f"sequencingRunID: {run_.run_ID}\n")
+
+				elif l.startswith('demultiplex_anchorReadsFile'):
+					outfile.write(f"demultiplex_anchorReadsFile: {run_.raw_data_local}/Undetermined_S0_R2_001.fastq.gz\n")
+
+				elif l.startswith('demultiplex_adriftReadsFile'):
+					outfile.write(f"demultiplex_adriftReadsFile: {run_.raw_data_local}/Undetermined_S0_R1_001.fastq.gz\n")
+
+				elif l.startswith('demultiplex_index1ReadsFile'):
+					outfile.write(f"demultiplex_index1ReadsFile: {run_.raw_data_local}/Undetermined_S0_I1_001.fastq.gz\n")
+
+				elif l.startswith('demultiplex_sampleDataFile'):
+					outfile.write(f"demultiplex_sampleDataFile: {run_.raw_data_local}/CompletedSampleSheet.tsv\n")
+
+				elif l.startswith('annotateRepeats_inputFile: '):
+					outfile.write('annotateRepeats_inputFile: core/sites.rds\n')
+
+				elif l.startswith('callNearestGenes_inputFile: '):
+					outfile.write('callNearestGenes_inputFile: annotateRepeats/sites.rds\n')
+
+				elif l.find('_CPUs: ') > -1:
+					l = l.replace('_CPUs: ', '_CPUs: 30 #')
+					outfile.write(f"{l}\n")
+
+				elif l.startswith('softwareDir: '):
+					outfile.write('softwareDir: /data/AAVengeR\n')
+
+				else:
+					outfile.write(l)
+```
+
+
+# Run AAVengeR with docker
+
+```sh
+screen -S aavenger_run
+
+sudo docker run -it --mount type=bind,source=/data,dst=/data/ aavenger_docker_v2_2 bash 
+
+cd /data/GenomicTrackRepository/data/raw/reference_integration_sites/wu_hiv
+
+AAVENGER_DIR="/data/AAVengeR"
+
+for config_ in /data/GenomicTrackRepository/data/raw/reference_integration_sites/wu_hiv/*/CompletedConfigFile.yml
+do
+	# head -n 100  $config_
+	Rscript $AAVENGER_DIR/aavenger.R $config_
+done
+
+
+```
+
+```sh
+# monitoring
+cd /data/GenomicTrackRepository/data/processed/reference_integration_sites/wu_hiv/180305_M00281_0327_000000000-BMK22/core
+tail -f demultiplex/log
+tail -f replicateJobTable
+```
+
+# Remove raw sequencing files
+
+```python
+[os.remove(f) for f in  glob.glob(pjoin(project_paths.paths['data_raw_sequencing'], '*fastq.gz'))]
+````
 
 df_run_metadata = pd.read_csv(pjoin(project_paths.paths['data_processed'], '0_process_aavenger_runs', 'aavenger_run_metadata.csv'))
 
