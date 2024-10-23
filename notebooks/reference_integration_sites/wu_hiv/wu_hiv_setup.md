@@ -333,14 +333,23 @@ sudo docker run -it --mount type=bind,source=/data,dst=/data/ aavenger_docker_v2
 
 cd /data/GenomicTrackRepository/data/raw/reference_integration_sites/wu_hiv
 
+
 AAVENGER_DIR="/data/AAVengeR"
+raw_path=/data/GenomicTrackRepository/data/raw/reference_integration_sites/wu_hiv
+processed_path="/data/GenomicTrackRepository/data/processed/reference_integration_sites/wu_hiv"
 
-for config_ in /data/GenomicTrackRepository/data/raw/reference_integration_sites/wu_hiv/*/CompletedConfigFile.yml
+for config_ in "$raw_path"/*/CompletedConfigFile.yml
 do
-	# head -n 100  $config_
-	Rscript $AAVENGER_DIR/aavenger.R $config_
-done
+    run_id=$(basename "$(dirname "$config_")")
 
+    # Check if run_id (directory or file) exists, and skip Rscript if it does
+    if [ -e "$processed_path/$run_id" ]; then
+        echo "Skipping $run_id, already processed."
+    else
+        echo "Processing $run_id..."
+        Rscript "$AAVENGER_DIR/aavenger.R" "$config_"
+    fi
+done
 
 ```
 
