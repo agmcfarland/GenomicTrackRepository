@@ -11,6 +11,11 @@
 # },
 
 
+## Get all data
+# find /media/lorax/data/export/projects/exchange -name intSites.tsv | xargs cat > /home/agmcfarland/all_intSites.tsv
+
+##
+
 rm(list = ls())
 project_dir <- '/data/GenomicTrackRepository'
 notebook_name <- 'reference_integration_sites'
@@ -59,6 +64,6 @@ for (vector_type_ in c('gamma', 'lenti')) {
   df_temp_intsites <- df_temp_intsites %>%
     dplyr::mutate(timepoint_in_days = convert_to_days(timePoint))
   
-  write.csv(df_temp_intsites, file.path(project_paths$data_processed_analysis, paste0(vector_type_, '_hg38_published_gt_set.csv')), row.names = FALSE)
+  write.csv(df_temp_intsites, file.path(project_paths$data_processed_analysis, paste0(vector_type_, '_', ref_genome_,'_published_gt_set.csv')), row.names = FALSE)
   
 }

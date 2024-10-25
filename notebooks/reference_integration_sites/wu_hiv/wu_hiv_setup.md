@@ -44,7 +44,6 @@ project_paths.add_path(
 	)
 os.makedirs(project_paths.paths['analysis_interim'], exist_ok = True)
 
-
 project_paths.add_path(
 	key = 'anaylsis_processed', 
 	path = pjoin(project_paths.paths['data_processed'], 'reference_integration_sites', analysis_name)
@@ -151,7 +150,7 @@ Using default AAVengeR HMMs and settings for wild HIV
 
 ```python
 
-for _, run_ in df_metadata.iterrows():break
+for _, run_ in df_metadata.iterrows():
 
 	with gzip.open(pjoin(run_.raw_data_local, 'Undetermined_S0_R2_001.fastq.gz'), 'rt') as input_handle:
 		store_record = []
@@ -365,3 +364,61 @@ tail -f replicateJobTable
 ```python
 [os.remove(f) for f in  glob.glob(pjoin(project_paths.paths['data_raw_sequencing'], '*fastq.gz'))]
 ````
+
+# Gather all supplemental files into on table
+
+```python
+df_all_supp = pd.DataFrame()
+for _, run_ in df_metadata.iterrows():
+
+	df_temp_supp = pd.read_csv(run_.sample_sheet_supplemental_path)
+
+	df_temp_supp['run_ID'] = run_.run_ID
+
+	df_all_supp = pd.concat([df_all_supp, df_temp_supp])
+```
+
+# Combine all output files into one dataset
+
+```python
+
+df_all_sites = pd.DataFrame()
+for _, run_ in df_metadata.iterrows():
+
+	df_temp_sites = pd.read_excel(pjoin(run_.processed_data_local, 'callNearestGenes',  'sites.xlsx'))
+	
+	df_temp_sites = df_temp_sites[['trial', 'subject', 'sample', 'refGenome', 'posid', 'sonicLengths', 'reads', 'repLeaderSeq', 'nRepsObs', 'nearestGene', 'nearestGeneStrand', 'nearestGeneDist', 'inGene', 'inExon', 'beforeNearestGene', 'repeat_name', 'repeat_class', 'percentSampleRelAbund', 'flags', 'vector']]
+
+	df_all_sites = pd.concat([df_all_sites, df_temp_sites])
+
+
+all_sites_shape = df_all_sites.shape
+
+df_all_sites = df_all_sites.merge(df_all_supp, left_on = 'subject', right_on = 'specimen', how = 'outer')
+
+def specify_treatment(run_id_):
+	if run_id_ in ['180305_M00281_0327_000000000-BMK22', '190201_M00281_0451_000000000-C8N97']:
+		return 'ART-treated'
+	elif run_id_ in ['190912_M03249_0010_000000000-CKNGK', '190915_M00281_0533_000000000-CN99V', '190920_M03249_0013_000000000-CNJ7H']:
+		return 'acute'
+	elif run_id_ in ['191210_M05588_0259_000000000-CRV2M', '191218_M03249_0040_000000000-CRT4T6', '191220_M03249_0042_000000000-CRRWT']:
+		return 'chronic'
+	else:
+		return 'error_here'
+
+df_all_sites['condition'] = df_all_sites['run_ID'].apply(specify_treatment)
+
+
+assert df_all_sites.shape[0] == df_all_sites.shape[0]
+
+df_all_sites.to_csv(pjoin(project_paths.paths['anaylsis_processed'], 'wu_hiv_hs1.csv'), index = None)
+```
+
+
+
+
+
+
+
+
+
