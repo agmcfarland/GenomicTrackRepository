@@ -378,7 +378,7 @@ for _, run_ in df_metadata.iterrows():
 	df_all_supp = pd.concat([df_all_supp, df_temp_supp])
 ```
 
-# Combine all output files into one dataset
+# Combine all output files into one dataset and add metadata
 
 ```python
 
@@ -408,6 +408,15 @@ def specify_treatment(run_id_):
 
 df_all_sites['condition'] = df_all_sites['run_ID'].apply(specify_treatment)
 
+df_all_sites['celltype'] = df_all_sites['celltype'].apply(lambda x: x.lower()).apply(lambda x: x.replace('-', '_')).apply(lambda x: x.replace(' ', ''))
+
+df_all_sites['celltype'] = df_all_sites['celltype'].apply(lambda x: x + '_blank' if x.find('_') == -1 else x)
+
+df_all_sites['compartment'] = df_all_sites['celltype'].apply(lambda x: x.split('_')[0])
+
+df_all_sites['cell_type'] = df_all_sites['celltype'].apply(lambda x: x.split('_')[1])
+
+df_all_sites = df_all_sites.rename(columns = {'celltype': 'annotation'})
 
 assert df_all_sites.shape[0] == df_all_sites.shape[0]
 
@@ -415,7 +424,11 @@ df_all_sites.to_csv(pjoin(project_paths.paths['anaylsis_processed'], 'wu_hiv_hs1
 ```
 
 
+# Refactor repeat classes
 
+```R
+
+````
 
 
 

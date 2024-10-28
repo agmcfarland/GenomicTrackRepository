@@ -12,6 +12,7 @@
 
 
 ## Get all data
+## Multiple manual step
 # find /media/lorax/data/export/projects/exchange -name intSites.tsv | xargs cat > /home/agmcfarland/all_intSites.tsv
 
 ##
