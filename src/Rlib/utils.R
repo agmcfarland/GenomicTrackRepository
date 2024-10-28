@@ -150,3 +150,187 @@ convert_to_days <- function(time_vector) {
     }
   })
 }
+
+
+### REPEAT ANALYSIS FUNCTIONS TEMP START ###
+
+#' Format AAVengeR sites
+#' 
+#' Applies formatting to standard AAVengeR sites table
+#' 
+format_aavenger_sites <- function(df) {
+  df <- df %>%
+    split_posid_into_chromosome_position() %>%
+    ordered_aavenger_posid()
+  
+  return(df)
+}
+
+split_posid_into_chromosome_position <- function(df) {
+  return(df %>%
+           tidyr::separate(col = posid, into = c('chromosome', 'position', 'extra'), remove = FALSE) %>%
+           dplyr::mutate(
+             position = as.numeric(position),
+             strand = gsub("[^+-]", "", posid)))
+}
+  
+
+ordered_aavenger_posid <- function(df, remove_chromosome_number = TRUE) {
+  df <- df %>%
+    dplyr::mutate(
+      chromosome_number = stringr::str_replace(chromosome, 'chr', ''),
+      chromosome_number = stringr::str_replace(chromosome_number, 'X', '23'),
+      chromosome_number = stringr::str_replace(chromosome_number, 'Y', '24'),
+      chromosome_number = as.numeric(chromosome_number)
+    ) %>%
+    dplyr::arrange(chromosome_number, as.numeric(position))
+  
+  df$posid_factor <- factor(df$posid, levels = base::unique(df$posid))
+  
+  if (remove_chromosome_number) {
+    df <- dplyr::select(df, -chromosome_number)
+  }
+  
+  return(df)
+}
+
+
+relabel_repeat_categories <- function(df) {
+  df <- df %>%
+    dplyr::mutate(
+      repeat_simplified = ifelse(is.na(repeat_class), 'not_a_repeat', repeat_class),
+      repeat_simplified = ifelse(repeat_class == '', 'not_a_repeat', repeat_class),
+      repeat_simplified = ifelse(stringr::str_detect(repeat_simplified, 'LINE'), 'LINE', repeat_simplified),
+      repeat_simplified = ifelse(stringr::str_detect(repeat_simplified, 'SINE'), 'SINE', repeat_simplified),
+      repeat_simplified = ifelse(stringr::str_detect(repeat_simplified, 'LTR'), 'LTR', repeat_simplified),
+      repeat_simplified = ifelse(stringr::str_detect(repeat_simplified, 'atellite'), 'satellite', repeat_simplified),
+      repeat_simplified = ifelse(stringr::str_detect(repeat_simplified, 'etrop'), 'retrotransposon', repeat_simplified),
+      repeat_simplified = ifelse(stringr::str_detect(repeat_simplified, 'DNA'), 'DNA', repeat_simplified),
+      repeat_simplified = ifelse(stringr::str_detect(repeat_simplified, 'known'), 'unknown', repeat_simplified),
+      repeat_simplified = ifelse(stringr::str_detect(repeat_simplified, 'rRNA|snRNA|scRNA|tRNA|srpRNA'), 'RNA', repeat_simplified),
+      repeat_simplified = ifelse(stringr::str_detect(repeat_simplified, 'Low_complexity'), 'low_complexity', repeat_simplified),
+      repeat_simplified = ifelse(stringr::str_detect(repeat_simplified, 'RC/Helitron'), 'other', repeat_simplified),
+      repeat_simplified = ifelse(stringr::str_detect(repeat_simplified, 'Simple_repeat'), 'simple_repeat', repeat_simplified)
+      )
+  return(df)
+}
+
+unnest_mhc_table <- function(aavenger_mhc) {
+  aavenger_mhc <- aavenger_mhc %>%
+    tidyr::unnest(posids) %>%
+    dplyr::rename(posid = posids)
+  return(aavenger_mhc)
+}
+
+split_posid_into_separate_values <- function(df) {
+  df <- df %>%
+    tidyr::separate(posid, into = c('chromosome', 'start', 'extra'), remove = FALSE)
+  return(df)
+}
+
+relabel_NA_repeat_as_not_a_repeat <- function(df) {
+  df <- df %>%
+    dplyr::mutate(repeat_class = ifelse(is.na(repeat_class), 'not_a_repeat', repeat_class)) %>%
+  return(df)
+}
+
+find_overlaps_in_repeats <- function(aavenger_mhc, repeat_table) {
+
+  grange_repeat_table <- GenomicRanges::makeGRangesFromDataFrame(repeat_table %>%
+                                                                   dplyr::select(query_seq, query_start, query_end, repeat_name, repeat_class),
+                           keep.extra.columns = TRUE,
+                           ignore.strand = TRUE,
+                           seqinfo = NULL,
+                           seqnames.field = 'query_seq',
+                           start.field = 'query_start',
+                           end.field = 'query_end',
+                           strand.field = 'strand',
+                           starts.in.df.are.0based = FALSE)
+  
+  grange_mhc <-  GenomicRanges::makeGRangesFromDataFrame(aavenger_mhc %>%
+                                                           unnest_mhc_table() %>%
+                                                           split_posid_into_separate_values() %>%
+                                                           dplyr::mutate(end = start),
+                           keep.extra.columns = TRUE,
+                           ignore.strand = TRUE,
+                           seqinfo = NULL,
+                           seqnames.field = 'chromosome',
+                           start.field = 'start',
+                           end.field = 'end',
+                           strand.field = 'strand',
+                           starts.in.df.are.0based = FALSE)
+  
+  
+  overlaps <- GenomicRanges::findOverlaps(grange_mhc, grange_repeat_table) %>%
+    as.data.frame()
+    
+  return(overlaps)                        
+}
+
+extract_overlap_repeat_by_indices <- function(overlaps, repeat_table) {
+  
+  extracted_repeat_indices <- lapply(unlist(overlaps$subjectHits), function(repeat_index){
+    return(repeat_table[repeat_index, ])
+    })
+  
+  extracted_repeat_indices <- do.call(rbind, extracted_repeat_indices)
+  
+  overlaps <- cbind(overlaps, extracted_repeat_indices)
+  
+  return(overlaps)
+}
+
+map_repeat_overlaps_to_mhc <- function(aavenger_mhc, repeat_table, overlaps) {
+
+  overlaps <- extract_overlap_repeat_by_indices(repeat_table = repeat_table, overlaps = overlaps)
+  
+  aavenger_mhc <- aavenger_mhc %>%
+    unnest_mhc_table() %>%
+    split_posid_into_separate_values() %>%
+    dplyr::mutate(row_index = 1:nrow(.))
+  
+  aavenger_mhc_repeats <- merge(
+    aavenger_mhc,
+    overlaps,
+    by.x = 'row_index',
+    by.y = 'queryHits',
+    all.x = TRUE
+  )
+  
+  return(aavenger_mhc_repeats)
+}
+
+count_repeat_class_per_cluster <- function(aavenger_mhc_repeats) {
+  
+  df_mhc_repeats_counts <- aavenger_mhc_repeats %>%
+    # dplyr::mutate(repeat_class = ifelse(is.na(repeat_class), 'not_a_repeat', repeat_class)) %>%
+    # relabel_repeat_categories() %>%
+    relabel_repeat_categories() %>%
+    dplyr::select(-repeat_class) %>%
+    dplyr::rename(repeat_class = repeat_simplified) %>%
+    dplyr::group_by(trial, subject, sample, clusterID, repeat_class) %>%
+    dplyr::mutate(repeat_class_count = dplyr::n()) %>%
+    dplyr::ungroup() %>%
+    dplyr::select(trial, subject, sample, clusterID, repeat_class, repeat_class_count) %>%
+    base::unique() %>%
+    dplyr::group_by(trial, subject, sample, clusterID) %>%
+    dplyr::mutate(
+      total_repeat_detections = sum(repeat_class_count),
+      percentage_of_repeat_detections = 100 * (repeat_class_count/total_repeat_detections)
+      )
+  
+  return(df_mhc_repeats_counts)
+  
+}
+
+extract_most_abundant_repeat_class_per_cluster <- function(mhc_repeats_counts_per_cluster) {
+  mhc_repeats_counts_per_cluster <- mhc_repeats_counts_per_cluster %>%
+    dplyr::group_by(trial, subject, sample, clusterID) %>%
+    dplyr::arrange(dplyr::desc(percentage_of_repeat_detections)) %>%
+    dplyr::slice(1) %>%
+    dplyr::ungroup()
+  
+  return(mhc_repeats_counts_per_cluster)
+}
+
+### REPEAT ANALYSIS TEMP END ###
