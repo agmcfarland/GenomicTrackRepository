@@ -1,8 +1,8 @@
-# Script to turn hg38 repeat table into a genomic track
+# Script to turn hs1 repeat table into a genomic track
 
 rm(list = ls())
 project_dir <- '/data/GenomicTrackRepository'
-genome <- 'hg38'
+genome <- 'hs1'
 # Libraries
 libraries <- list('dplyr')
 invisible(suppressMessages(do.call(library, libraries)))
@@ -38,7 +38,7 @@ relabel_repeat_categories <- function(df) {
 
 overwrite <- TRUE
 
-path_to_aavenger_repeat_table <- '/data/AAVengeR/data/genomeAnnotations/hg38.repeatTable.gz'
+path_to_aavenger_repeat_table <- '/data/AAVengeR/data/genomeAnnotations/hs1.repeatTable.gz'
 
 df_repeat_table <- vroom::vroom(path_to_aavenger_repeat_table)
 
