@@ -1,7 +1,7 @@
 GenomicTrackRepository
 ==============================
 
-Store scripts used to make Bushman Lab genomic tracks 
+Store scripts used to make Bushman Lab genomic tracks  
 
 Project Organization
 ------------
