@@ -12,12 +12,12 @@ project_paths <- build_project_paths(project_dir)
 
 system(
   command = paste0(
-    'rsync', ' -avzP', ' rsync://hgdownload.cse.ucsc.edu/goldenPath/hg38/database/ncbiRefSeqCurated.txt.gz', ' ', project_paths$data_raw
+    'rsync', ' -avzP', ' rsync://hgdownload.soe.ucsc.edu/goldenPath/rheMac10/bigZips/refMrna.fa.gz', ' ', project_paths$data_raw
   )
 )
 
 
-df_raw_table <- vroom::vroom(file = file.path(project_paths$data_raw, 'ncbiRefSeqCurated.txt.gz'), col_names = FALSE, delim = '\t')
+df_raw_table <- vroom::vroom(file = file.path(project_paths$data_raw, 'refMrna.fa.gz'), col_names = FALSE, delim = '\t')
 colnames(df_raw_table) <- c('bin', 'name', 'chrom', 'strand', 'txStart', 'txEnd', 'cdsStart', 'cdsEnd', 'exonCount',
                             'exonStarts', 'exonEnds', 'score', 'name2', 'cdsStartStat', 'cdsEndStat', 'exonFrames')
 

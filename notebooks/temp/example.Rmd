@@ -1,6 +1,7 @@
 
 # Script to generate DNAseI track for hg38 genome
-# https://genome.ucsc.edu/cgi-bin/hgTables?db=hg38&hgta_group=regulation&hgta_track=wgEncodeRegDnase&hgta_table=wgEncodeRegDnaseUwTh1Peak&hgta_doSchema=describe+table+schema
+[link](https://genome.ucsc.edu/cgi-bin/hgTables?db=hg38&hgta_group=regulation&hgta_track=wgEncodeRegDnase&hgta_table=wgEncodeRegDnaseUwTh1Peak&hgta_doSchema=describe+table+schema)
+
 
 ````{r}
 rm(list = ls())
@@ -13,10 +14,11 @@ invisible(suppressMessages(sapply(list.files(file.path(project_dir, 'src', 'Rlib
 project_paths <- build_project_paths(project_dir)
 ````
 
+# Standard
 
 ```{r}
 
-aavenger_sites <- vroom::vroom(file.path(project_paths$data_raw, 'Rivella_20240516.tsv.gz')) %>%
+aavenger_sites <- vroom::vroom(file.path(project_dir, 'notebooks', 'temp', 'Rivella_20240516.tsv.gz')) %>%
   dplyr::mutate(sampleName = patient)
 
 print(aavenger_sites %>% dplyr::filter(is.na(sampleName)) %>% nrow())
@@ -48,6 +50,84 @@ print(head(random_match_df))
 
 # combine random match and experimental dataframes
 combined_df <- rbind(aavenger_sites, random_match_df)
+```
+
+## View integration site by chromosome counts
+
+```{r}
+
+df_percentage <- combined_df %>%
+         dplyr::group_by(heatmap_group, type, seqname) %>%
+         dplyr::summarize(count = dplyr::n()) %>%
+         dplyr::mutate(percentage = 100 * (count/sum(count))) %>%
+         dplyr::ungroup()
+
+ggplot(combined_df %>%
+         dplyr::group_by(heatmap_group, type, seqname) %>%
+         dplyr::summarize(count = dplyr::n()) %>%
+         dplyr::mutate(percentage = 100 * (count/sum(count))) %>%
+         dplyr::ungroup(), 
+       aes(x = type, y = percentage, fill = seqname))+
+  facet_wrap(~heatmap_group) +
+  geom_bar(stat = 'identity', position = position_stack())
+
+
+dfx <- combined_df %>%
+  dplyr::filter(heatmap_group == '_R003851 D14_', type == 'insertion', seqname == 'chr17') %>%
+  dplyr::arrange(start)
+
+df_results <- data.frame()
+cluster_group <- 1
+for (i in 1:nrow(dfx)) {
+  
+  if (i+1 > nrow(dfx)) {
+    break
+  }
+  
+  site_ <- dfx[i, ]
+  
+  next_site <- dfx[i+1, ]
+  
+  if (site_$start + 50000 > next_site$start - 50000) {
+    
+    df_results <- rbind(
+      df_results,
+      data.frame(
+        'seed_site' = site_$start,
+        'next_site' = next_site$start,
+        'group' = cluster_group
+      )
+    )
+    
+  } else {
+    cluster_group <- cluster_group + 1
+  }
+}
+
+df_results2 <- df_results %>%
+  dplyr::group_by(group) %>%
+  dplyr::mutate(
+    member_sites = length(next_site) + 1,
+    start = min(seed_site),
+    end = max(next_site),
+    sites = paste(scales::comma(next_site), collapse = '-> '),
+    site_distance = next_site - start,
+    sites_distances_char = paste(scales::comma(site_distance), collapse = ' -> '),
+    mean_distance = mean(site_distance)
+    ) %>%
+  dplyr::select(-c(seed_site, next_site, site_distance)) %>%
+  dplyr::ungroup() %>%
+  base::unique() %>%
+  dplyr::mutate(
+    group_range = end - start,
+    group_range_char = scales::comma(group_range),
+    ucsc_id = paste0('chr17:', start, '-', end)
+  )
+
+```
+
+
+```{r}
 
 # get the provided RData and rds feature files into a list
 feature_files_to_process <- list.files(file.path(project_paths$data_processed, 'hg38'), pattern = "cpgIslandExt.rds|ncbiRefSeqCurated_transcription_start.rds|ncbiRefSeqCurated_transcription.rds|wgEncodeRegDnaseClustered.rds", full.names = TRUE)
@@ -63,26 +143,69 @@ combined_overlap_test_results_genomic_ranges <- InvestigateIntegrations::test_fo
 
 print(head(combined_overlap_test_results_genomic_ranges))
 
-hot_roc_result <- InvestigateIntegrations::hotroc_compare_insertion_to_match(
-  matched_overlap_df = combined_overlap_test_results_genomic_ranges
+```
+
+# GC content
+
+```{r}
+
+if (!file.exists(file.path(project_dir, 'notebooks', 'temp', 'gc_calculation.rds'))) {
+  
+  genomic_sequence <- Biostrings::readDNAStringSet(file.path('/data/topo_scratch', 'hg38.fa.gz'))
+
+  chromosomes_to_keep <- names(genomic_sequence)[!stringr::str_detect(names(genomic_sequence), '_random|_alt|chrUn|_fix')]
+    
+  genomic_sequence <- genomic_sequence[names(genomic_sequence) %in% chromosomes_to_keep]
+  
+  result <- GC_percentage_per_insertion(
+    df_combined = combined_df,
+    genomic_sequence = genomic_sequence,
+    chromosome_lengths = InvestigateIntegrations::example_hg38_chromosome_lengths,
+    window_sizes_to_test = c(100, 1000, 10000, 100000, 1000000),
+    fasta_name = 'genome'
   )
+  
+  # saveRDS(result, file.path(project_dir, 'notebooks', 'temp', 'gc_calculation.rds'))
+  
+}
 
-# GC content needs to be processed slightly differently. only window sizes of 0 are used since windows are already precalculated in the track itself
-gc_content_feature_files_to_process <- list.files(file.path(project_paths$data_processed, 'hg38'), pattern = "gc_content", full.names = TRUE)
+result <- readRDS(file.path(project_dir, 'notebooks', 'temp', 'gc_calculation.rds'))
+  
+result <- result %>%
+  dplyr::select(-unique_id) %>%
+  dplyr::filter(seqname != 'chrM') %>%
+  dplyr::mutate(
+    dplyr::across(
+      c(where(is.numeric)),
+      tidyr::replace_na,
+      0
+    )
+    )
 
-combined_overlap_test_results_genomic_ranges_gc_content <- InvestigateIntegrations::test_for_overlaps(
-  matched_aavenger_sites_df = combined_df,
-  list_of_feature_files = gc_content_feature_files_to_process,
-  overlap_ranges_to_test = c(0)
+```
+
+
+# Combine and use hotrocs
+
+```{r}
+
+all_genomic_tests <- merge(
+  combined_overlap_test_results_genomic_ranges,
+  result %>%
+    dplyr::select(-c(width, strand, end, mid)),
+  by = c('type', 'heatmap_group', 'seqname', 'start')
 )
+
 
 # manually change window to reflect that included in the filename
 hot_roc_result_gc <- InvestigateIntegrations::hotroc_compare_insertion_to_match(
-  matched_overlap_df = combined_overlap_test_results_genomic_ranges_gc_content
+  matched_overlap_df = all_genomic_tests
   )
+
+saveRDS(hot_roc_result_gc, file.path(project_dir, 'notebooks', 'temp', 'raw_hotrocs_result.rds'))
 ```
 
-# reformmated
+# reformatted
 
 ```{r, fig.asp=1, fig.width=8}
 
@@ -90,18 +213,10 @@ experimental_subject_order <- c("ALS17.1", "ALS17.2", "ALS17.3", "ALS20.1", "ALS
                    "CHOP.1.D0", "CHOP.1.D14", "210410091.D0",  "210410091.D14","R003850.D0", "R003850.D14", "R003851.D0", "R003851.D14",
                    "WAS1", "WAS2", "WAS3", "CGD1", "CGD2", "CGD3", "CGD4")
 
-hot_roc_result_mod <- InvestigateIntegrations::format_hot_roc_result(hot_roc_result)
-hot_roc_result_mod_gc <- InvestigateIntegrations::format_hot_roc_result(hot_roc_result_gc) %>%
-  dplyr::mutate(
-    feature_window_2 = sub(".*_(.*)\\.rds.*", "\\1", feature_window),
-    feature_window = paste0('gc_content.rds.', feature_window_2)
-    ) %>%
-  dplyr::select(-feature_window_2)
+hot_roc_result_mod <- InvestigateIntegrations::format_hot_roc_result(readRDS(file.path(project_dir, 'notebooks', 'temp', 'raw_hotrocs_result.rds')))
 
-hot_roc_result_mod <- rbind(
-  hot_roc_result_mod,
-  hot_roc_result_mod_gc
-  ) %>%
+
+hot_roc_result_mod <- hot_roc_result_mod %>%
   dplyr::mutate(
     experimental_subject = stringr::str_replace_all(heatmap_group, 'X_', ''),
     experimental_subject = stringr::str_replace_all(experimental_subject, '_', ''),
@@ -119,7 +234,8 @@ hot_roc_result_mod <- rbind(
       feature == 'ncbiRefSeqCurated_transcription' ~ 'RefSeqGene',
       feature == 'ncbiRefSeqCurated_transcription_start' ~ 'TSS',
       feature == 'wgEncodeRegDnaseClustered' ~ 'DNaseI',
-      TRUE ~ 'GC'
+      feature == 'genome_gc' ~ 'GC',
+      TRUE ~ 'lookatme'
     ),
     feature_short_factor = factor(feature_short, c('DNaseI', 'CpG', 'GC', 'RefSeqGene', 'TSS'))
   ) %>%
@@ -164,11 +280,19 @@ p1 <- ggplot(hot_roc_result_mod, aes(y = feature_window_factor, x = experimental
   # geom_text(aes(label = round(ROC_value, 2)), nudge_y = -0.25, size = 2.5, color = 'black') +
   coord_cartesian(clip = 'off') +
   # colors
-  scale_fill_gradientn(colours = c("blue", "white", "red"), 
-                       na.value = "transparent", 
-                       breaks = c(0, 0.25, 0.5, 0.75, 1), 
-                       labels = c(0, 0.25, 0.5, 0.75, 1), 
-                       limits = c(0, 1)) +
+  # scale_fill_gradientn(colours = c("blue", "white", "red"), 
+  #                      na.value = "transparent", 
+  #                      breaks = c(0, 0.25, 0.5, 0.75, 1), 
+  #                      labels = c(0, 0.25, 0.5, 0.75, 1), 
+  #                      limits = c(0, 1)) +
+  # scale_fill_gradientn(colours = c("blue", "white", "red"), 
+  #                      na.value = "transparent", 
+  #                      limits = c(0.35, 0.85),
+  #                      breaks = c(0.35, 0.45, 0.5, 0.55, 0.65, 0.75, 0.85),
+  #                      labels = c(0.35, 0.45, 0.5, 0.55, 0.65, 0.75, 0.85)) +
+scale_fill_gradient2(
+  low = "blue", high = "red", mid = "white",
+  midpoint = 0.5, limit = c(0.4, 0.85)) +
   theme_classic() +
   theme(
     # aspect.ratio = 1,
@@ -181,7 +305,7 @@ p1 <- ggplot(hot_roc_result_mod, aes(y = feature_window_factor, x = experimental
   )
 
 cowplot::save_plot(
-  filename = file.path(project_paths$data_raw, 'updated_example_heatmap.pdf'),
+  filename = file.path('/data/GenomicTrackRepository/notebooks/temp', 'updated_example_heatmap.pdf'),
   plot = p1,
   base_asp = 0.5,
   base_width = 10,
@@ -190,3 +314,15 @@ cowplot::save_plot(
 
 ```
 
+
+# Chuck comparison
+
+```{r}
+
+dfx <- readRDS(file.path('/data/GenomicTrackRepository/notebooks/temp', 'roc.res.rds')) %>%
+  InvestigateIntegrations::format_hot_roc_result()
+
+
+
+
+```
