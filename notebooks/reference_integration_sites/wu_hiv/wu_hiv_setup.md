@@ -394,7 +394,7 @@ for _, run_ in df_metadata.iterrows():
 
 all_sites_shape = df_all_sites.shape
 
-df_all_sites = df_all_sites.merge(df_all_supp, left_on = 'subject', right_on = 'specimen', how = 'outer')
+df_all_sites = df_all_sites.merge(df_all_supp, left_on = ['trial', 'subject'], right_on = ['run_ID', 'specimen'], how = 'outer')
 
 def specify_treatment(run_id_):
 	if run_id_ in ['180305_M00281_0327_000000000-BMK22', '190201_M00281_0451_000000000-C8N97']:
@@ -422,7 +422,6 @@ assert df_all_sites.shape[0] == df_all_sites.shape[0]
 
 df_all_sites.to_csv(pjoin(project_paths.paths['anaylsis_processed'], 'wu_hiv_hs1.csv'), index = None)
 ```
-
 
 # Refactor repeat classes
 
