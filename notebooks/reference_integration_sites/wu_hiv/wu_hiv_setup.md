@@ -365,7 +365,9 @@ tail -f replicateJobTable
 [os.remove(f) for f in  glob.glob(pjoin(project_paths.paths['data_raw_sequencing'], '*fastq.gz'))]
 ````
 
-# Gather all supplemental files into on table
+# Post run
+
+## Gather all supplemental files into on table
 
 ```python
 df_all_supp = pd.DataFrame()
@@ -378,7 +380,7 @@ for _, run_ in df_metadata.iterrows():
 	df_all_supp = pd.concat([df_all_supp, df_temp_supp])
 ```
 
-# Combine all output files into one dataset and add metadata
+## Combine all output files into one dataset and add metadata
 
 ```python
 
@@ -423,11 +425,6 @@ assert df_all_sites.shape[0] == df_all_sites.shape[0]
 df_all_sites.to_csv(pjoin(project_paths.paths['anaylsis_processed'], 'wu_hiv_hs1.csv'), index = None)
 ```
 
-# Refactor repeat classes
-
-```R
-
-```
 
 
 
