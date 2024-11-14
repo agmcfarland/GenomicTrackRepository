@@ -4,6 +4,10 @@ Alex McFarland
 
 # Background
 
+Processing Vincent Wu study data using AAVengeR V2_2_0
+
+https://www.nature.com/articles/s41590-022-01371-3
+
 ```sh
 PROJECT_PATH="/data/GenomicTrackRepository"
 cd $PROJECT_PATH
@@ -425,6 +429,28 @@ assert df_all_sites.shape[0] == df_all_sites.shape[0]
 df_all_sites.to_csv(pjoin(project_paths.paths['anaylsis_processed'], 'wu_hiv_hs1.csv'), index = None)
 ```
 
+## Create metadata file
+
+Use supplemental data file
+
+```python
+
+df_final_metadata = df_all_supp.copy(deep = True)
+
+df_final_metadata['condition'] = df_final_metadata['run_ID'].apply(specify_treatment)
+
+df_final_metadata['celltype'] = df_final_metadata['celltype'].apply(lambda x: x.lower()).apply(lambda x: x.replace('-', '_')).apply(lambda x: x.replace(' ', ''))
+
+df_final_metadata['celltype'] = df_final_metadata['celltype'].apply(lambda x: x + '_blank' if x.find('_') == -1 else x)
+
+df_final_metadata['compartment'] = df_final_metadata['celltype'].apply(lambda x: x.split('_')[0])
+
+df_final_metadata['cell_type'] = df_final_metadata['celltype'].apply(lambda x: x.split('_')[1])
+
+df_final_metadata = df_final_metadata.rename(columns = {'celltype': 'annotation'})
+
+df_final_metadata.to_csv(pjoin(project_paths.paths['anaylsis_processed'], 'wu_hiv_metadata.csv'), index = None)
+```
 
 
 

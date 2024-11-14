@@ -10,6 +10,13 @@ invisible(suppressMessages(sapply(list.files(file.path(project_dir, 'src', 'Rlib
 
 project_paths <- build_project_paths(project_dir)
 
+system(
+  command = paste0(
+    'rsync', ' -avzP', ' rsync://hgdownload.soe.ucsc.edu/goldenPath/hs1/bigZips//hs1.repeatMasker.out.gz', ' ', file.path(project_paths$data_raw, genome)
+  )
+)
+
+project_paths$data_raw_analysis <- file.path(project_paths$data_raw, genome)
 project_paths$data_interim_analysis <- file.path(project_paths$data_interim, genome)
 project_paths$data_processed_analysis <- file.path(project_paths$data_processed, genome)
 
