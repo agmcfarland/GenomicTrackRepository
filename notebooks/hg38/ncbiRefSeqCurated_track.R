@@ -126,7 +126,8 @@ df_expanded_genes2 <- df_expanded_genes2 %>%
 
 df_expanded_genes2 <- df_expanded_genes2 %>%
   dplyr::select(-feature) %>%
-  dplyr::rename(feature = feature_new)
+  dplyr::rename(feature = feature_new) %>%
+  base::unique()
 
 grange_raw_table <- df_expanded_genes2 %>%
   GenomicRanges::makeGRangesFromDataFrame(keep.extra.columns = TRUE)
@@ -136,5 +137,5 @@ saveRDS(grange_raw_table, file.path(project_paths$data_processed, 'hg38', 'ncbiR
 write.csv(df_expanded_genes2, file.path(project_paths$data_processed, 'hg38', 'ncbiRefSeqCurated_expanded.csv'), row.names = FALSE)
 
 
-  
+# df_expanded_genes2 <- read.csv(file.path(project_paths$data_processed, 'hg38', 'ncbiRefSeqCurated_expanded.csv'))
 

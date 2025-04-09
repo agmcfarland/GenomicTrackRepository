@@ -19,12 +19,6 @@ system(
   )
 )
 
-system(
-  command = paste0(
-    'gunzip', ' ', project_paths$data_raw, '/mm9.fa.gz'
-  )
-)
-
 conda_path <- '/home/ubuntu/miniconda3/condabin/conda'
 
 bigbed_filepath <- file.path(project_paths$data_raw, 'encodeCcreCombined.bb')
@@ -61,3 +55,9 @@ lapply(dplyr::group_split(df_raw_table, ucscLabel), function(df_ucsc_label) {
   saveRDS(grange_raw_table, file = output_filename)
   
 })
+
+write.csv(df_raw_table, file.path(project_paths$data_processed, genome_assembly, 'encode_ccre_all.csv'), row.names = FALSE)
+
+saveRDS(df_raw_table %>%
+  GenomicRanges::makeGRangesFromDataFrame(keep.extra.columns = TRUE), 
+  file.path(project_paths$data_processed, genome_assembly, 'encode_ccre_all.rds'))
