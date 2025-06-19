@@ -136,6 +136,5 @@ saveRDS(grange_raw_table, file.path(project_paths$data_processed, 'hg38', 'ncbiR
 
 write.csv(df_expanded_genes2, file.path(project_paths$data_processed, 'hg38', 'ncbiRefSeqCurated_expanded.csv'), row.names = FALSE)
 
-
 # df_expanded_genes2 <- read.csv(file.path(project_paths$data_processed, 'hg38', 'ncbiRefSeqCurated_expanded.csv'))
 
