@@ -36,6 +36,8 @@ analysis_name = 'wu_hiv'
 # Set working paths
 
 ```python
+project_paths.add_path(key = 'aavenger', path = '/data/AAVengeR')
+
 project_paths.add_path(
 	key = 'data_raw_sequencing', 
 	path = pjoin(project_paths.paths['data_raw'], 'reference_integration_sites', analysis_name)
@@ -54,7 +56,7 @@ project_paths.add_path(
 	)
 os.makedirs(project_paths.paths['anaylsis_processed'], exist_ok = True)
 
-aavenger_dir = '/data/AAVengeR'
+# aavenger_dir = '/data/AAVengeR'
 ```
 
 # Add metadata to raw folder
@@ -279,9 +281,57 @@ for _, run_ in df_metadata.iterrows():
 Manually added config file to external data. Added time stamp for reference.
 
 ```python
-production_config = pjoin(project_paths.paths['data_external'], 'production_config_20241022.yml')
+# production_config = pjoin(project_paths.paths['data_external'], 'production_config_20241022.yml')
 
-for _, run_ in df_metadata.iterrows():
+# for _, run_ in df_metadata.iterrows():
+
+# 	config_file_completed = pjoin(run_.raw_data_local, 'CompletedConfigFile.yml')
+
+# 	with open(config_file_completed, 'w') as outfile:
+
+# 		with open(production_config, 'r') as infile:
+
+# 			for l in infile:
+
+# 				if l.startswith('outputDir'):
+# 					outfile.write(f"outputDir: {run_.processed_data_local}\n")
+
+# 				elif l.startswith('sequencingRunID'):
+# 					outfile.write(f"sequencingRunID: {run_.run_ID}\n")
+
+# 				elif l.startswith('demultiplex_anchorReadsFile'):
+# 					outfile.write(f"demultiplex_anchorReadsFile: {run_.raw_data_local}/Undetermined_S0_R2_001.fastq.gz\n")
+
+# 				elif l.startswith('demultiplex_adriftReadsFile'):
+# 					outfile.write(f"demultiplex_adriftReadsFile: {run_.raw_data_local}/Undetermined_S0_R1_001.fastq.gz\n")
+
+# 				elif l.startswith('demultiplex_index1ReadsFile'):
+# 					outfile.write(f"demultiplex_index1ReadsFile: {run_.raw_data_local}/Undetermined_S0_I1_001.fastq.gz\n")
+
+# 				elif l.startswith('demultiplex_sampleDataFile'):
+# 					outfile.write(f"demultiplex_sampleDataFile: {run_.raw_data_local}/CompletedSampleSheet.tsv\n")
+
+# 				elif l.startswith('annotateRepeats_inputFile: '):
+# 					outfile.write('annotateRepeats_inputFile: core/sites.rds\n')
+
+# 				elif l.startswith('callNearestGenes_inputFile: '):
+# 					outfile.write('callNearestGenes_inputFile: annotateRepeats/sites.rds\n')
+
+# 				elif l.find('_CPUs: ') > -1:
+# 					l = l.replace('_CPUs: ', '_CPUs: 30 #')
+# 					outfile.write(f"{l}\n")
+
+# 				elif l.startswith('softwareDir: '):
+# 					outfile.write('softwareDir: /data/AAVengeR\n')
+
+# 				else:
+# 					outfile.write(l)
+
+production_config = pjoin(project_paths.paths['aavenger'], 'config.yml')
+
+# config_file_completed = pjoin(project_paths.paths['data_raw_analysis'], 'CompletedConfigFile.yml')
+
+for _, run_ in df_metadata.iterrows(): #break
 
 	config_file_completed = pjoin(run_.raw_data_local, 'CompletedConfigFile.yml')
 
@@ -294,7 +344,7 @@ for _, run_ in df_metadata.iterrows():
 				if l.startswith('outputDir'):
 					outfile.write(f"outputDir: {run_.processed_data_local}\n")
 
-				elif l.startswith('sequencingRunID'):
+				elif l.startswith('demultiplex_seqRunID'):
 					outfile.write(f"sequencingRunID: {run_.run_ID}\n")
 
 				elif l.startswith('demultiplex_anchorReadsFile'):
@@ -310,13 +360,16 @@ for _, run_ in df_metadata.iterrows():
 					outfile.write(f"demultiplex_sampleDataFile: {run_.raw_data_local}/CompletedSampleSheet.tsv\n")
 
 				elif l.startswith('annotateRepeats_inputFile: '):
-					outfile.write('annotateRepeats_inputFile: core/sites.rds\n')
+					outfile.write('annotateRepeats_inputFile: callNearestGenes/sites.rds\n')
 
 				elif l.startswith('callNearestGenes_inputFile: '):
-					outfile.write('callNearestGenes_inputFile: annotateRepeats/sites.rds\n')
+					outfile.write('callNearestGenes_inputFile: core/sites.rds\n')
+
+				elif l.startswith('prepReads_excludeAdriftReadVectorHits:'):
+					outfile.write(f"prepReads_excludeAdriftReadVectorHits: False\n")
 
 				elif l.find('_CPUs: ') > -1:
-					l = l.replace('_CPUs: ', '_CPUs: 30 #')
+					l = l.replace('_CPUs: ', '_CPUs: 48 #')
 					outfile.write(f"{l}\n")
 
 				elif l.startswith('softwareDir: '):
@@ -330,29 +383,51 @@ for _, run_ in df_metadata.iterrows():
 # Run AAVengeR with docker
 
 ```sh
-screen -S aavenger_run
-
-sudo docker run -it --mount type=bind,source=/data,dst=/data/ aavenger_docker_v2_2 bash 
-
-cd /data/GenomicTrackRepository/data/raw/reference_integration_sites/wu_hiv
-
+screen -R aavenger_run
 
 AAVENGER_DIR="/data/AAVengeR"
-raw_path=/data/GenomicTrackRepository/data/raw/reference_integration_sites/wu_hiv
+raw_path="/data/GenomicTrackRepository/data/raw/reference_integration_sites/wu_hiv"
 processed_path="/data/GenomicTrackRepository/data/processed/reference_integration_sites/wu_hiv"
+
+# 1. Check if the raw_path actually exists to avoid loop errors
+if [ ! -d "$raw_path" ]; then
+    echo "Error: Directory $raw_path does not exist."
+    # exit 1
+fi
 
 for config_ in "$raw_path"/*/CompletedConfigFile.yml
 do
+    # 2. Prevent the loop from running if no files match the glob
+    [ -e "$config_" ] || continue
+
     run_id=$(basename "$(dirname "$config_")")
 
-    # Check if run_id (directory or file) exists, and skip Rscript if it does
+    # Check if run_id exists in processed_path and skip if it does
     if [ -e "$processed_path/$run_id" ]; then
         echo "Skipping $run_id, already processed."
     else
+        echo "------------------------------------------"
         echo "Processing $run_id..."
-        Rscript "$AAVENGER_DIR/aavenger.R" "$config_"
+        echo "Config Path: $config_"
+        
+        # 3. Docker Run
+        # Added -u to ensure files created aren't owned by root
+        # Added --name for easier tracking (optional)
+        docker run --rm \
+          -u $(id -u):$(id -g) \
+          --mount type=bind,source=/data,target=/data \
+          -e AAVENGER_DIR="$AAVENGER_DIR" \
+          -e AAVENGER_CONFIG_PATH="$config_" \
+          aavenger_docker_v3
+          
+        if [ $? -eq 0 ]; then
+            echo "Successfully processed $run_id"
+        else
+            echo "Error processing $run_id"
+        fi
     fi
 done
+
 
 ```
 
