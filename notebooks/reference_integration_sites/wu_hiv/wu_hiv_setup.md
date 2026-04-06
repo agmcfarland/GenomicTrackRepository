@@ -414,7 +414,6 @@ do
         # Added -u to ensure files created aren't owned by root
         # Added --name for easier tracking (optional)
         docker run --rm \
-          -u $(id -u):$(id -g) \
           --mount type=bind,source=/data,target=/data \
           -e AAVENGER_DIR="$AAVENGER_DIR" \
           -e AAVENGER_CONFIG_PATH="$config_" \
@@ -466,11 +465,15 @@ for _, run_ in df_metadata.iterrows():
 df_all_sites = pd.DataFrame()
 for _, run_ in df_metadata.iterrows():
 
-	df_temp_sites = pd.read_excel(pjoin(run_.processed_data_local, 'callNearestGenes',  'sites.xlsx'))
-	
-	df_temp_sites = df_temp_sites[['trial', 'subject', 'sample', 'refGenome', 'posid', 'sonicLengths', 'reads', 'repLeaderSeq', 'nRepsObs', 'nearestGene', 'nearestGeneStrand', 'nearestGeneDist', 'inGene', 'inExon', 'beforeNearestGene', 'repeat_name', 'repeat_class', 'percentSampleRelAbund', 'flags', 'vector']]
+	input_file = pjoin(run_.processed_data_local, 'annotateRepeats',  'sites.xlsx')
 
-	df_all_sites = pd.concat([df_all_sites, df_temp_sites])
+	if os.path.exists(input_file):
+
+		df_temp_sites = pd.read_excel(pjoin(run_.processed_data_local, 'annotateRepeats',  'sites.xlsx'))
+		
+		df_temp_sites = df_temp_sites[['trial', 'subject', 'sample', 'refGenome', 'posid', 'sonicLengths', 'reads', 'repLeaderSeq', 'nRepsObs', 'nearestGene', 'nearestGeneStrand', 'nearestGeneDist', 'inGene', 'inExon', 'beforeNearestGene', 'repeat_name', 'repeat_class', 'percentSampleRelAbund', 'flags', 'vector']]
+
+		df_all_sites = pd.concat([df_all_sites, df_temp_sites])
 
 
 all_sites_shape = df_all_sites.shape
