@@ -1,0 +1,306 @@
+---
+title: "Data set overview"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+author: "Alexander McFarland"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true 
+    theme: united 
+    highlight: tango
+---
+
+
+```{r set_chunk_info, setup, include=FALSE, echo=FALSE, message=FALSE} 
+rm(list = ls())
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, echo = FALSE) 
+```	
+
+```{r main}
+library(dplyr)
+library(ggplot2)
+library(scales)
+
+project_dir <- '/data/GenomicTrackRepository'
+invisible(sapply(list.files(file.path(project_dir, 'src/Rlib'), pattern="utils.R|site_jitter.R", full.names = TRUE), source))
+
+subproject_name <- paste0('reference_integration_sites')
+analysis_name <- paste0('wu_hiv')
+
+project_paths <- build_project_paths(project_dir)
+
+project_paths$data_raw_analysis <- file.path(project_paths$data_raw, subproject_name, analysis_name)
+dir.create(project_paths$data_raw_analysis, showWarnings = FALSE, recursive = TRUE)
+
+project_paths$data_interim_analysis <- file.path(project_paths$data_interim, subproject_name, analysis_name)
+dir.create(project_paths$data_interim_analysis, showWarnings = FALSE, recursive = TRUE)
+
+project_paths$data_processed_analysis <- file.path(project_paths$data_processed, subproject_name, analysis_name)
+dir.create(project_paths$data_processed_analysis, showWarnings = FALSE, recursive = TRUE)
+
+aavenger_version <- 'aavenger_v3_0_1'
+
+df_metadata <- read.csv(file.path(project_paths$data_processed_analysis, 'wu_hiv_metadata.csv'))
+
+chromosome_lengths <- read.csv(file.path(project_paths$data_processed, 'hs1', 'hs1.chrom.sizes.txt'), sep = ',')
+
+chromosome_lengths <- chromosome_lengths[colnames(chromosome_lengths) %in% c('seqname', 'chr_length')]
+
+chromosome_lengths <- chromosome_lengths %>%
+  dplyr::filter(!stringr::str_detect(seqname, '_'))
+
+genomic_sequence <- Biostrings::readDNAStringSet(file.path(project_paths$data_processed, 'hs1', 'hs1.fasta.gz'))
+
+keep_global_vars <- c(
+  # Values
+  'project_paths',
+  'project_dir',
+  'subproject_name',
+  'aavenger_version',
+  'sequencing_metdata',
+  'aavenger_run_ids',
+  'df_sites',
+  'genomic_sequence',
+  'chromosome_lengths',
+  # Data
+  'analysis_inputs',
+  'df_metadata',
+  # 'df_standardized_celltypes', 'df_cellType_colors',
+  # Self
+  'keep_global_vars'
+)
+internal_functions <- unlist(lapply(lsf.str(), function(x){x[1]})) # keep internal functions
+keep_global_vars <- c(keep_global_vars, internal_functions)
+```
+
+# All sites loaded
+
+```{r}
+rm(list = list_non_global_variables(ls(), keep_global_vars))
+
+df_sites <- read.csv(file.path(project_paths$data_processed_analysis, 'wu_hiv_hs1.csv')) %>%
+  dplyr::filter(!is.na(sonicLengths)) %>%
+  dplyr::mutate(
+    trial = condition,
+    subject = patient
+  )
+
+```
+
+# Description
+
+## Read demuliplexing
+
+```{r, fig.width=10}
+rm(list = list_non_global_variables(ls(), keep_global_vars))
+
+seq_ids <- base::unique(df_metadata$run_ID)
+
+df_reads <- data.frame()
+for (seq_id_ in seq_ids) {#break}
+  
+  # seq_id_ <- '190201_M00281_0451_000000000-C8N97'
+  
+  table_path <- file.path(project_paths$data_processed_analysis, seq_id_, 'core', 'demultiplex', 'readAttritionTbl.tsv')
+  
+  if (file.exists(table_path)) {
+    
+    df_temp <- read.csv(table_path, sep = '\t') %>%
+      dplyr::mutate(
+        sample = sub("^(.*?~){2}", "", sample),
+        replicate = sub("^(.*?~){1}", "", sample),
+        sample = sub("~.", "", sample),
+        replicate = as.numeric(replicate)
+        ) %>%
+      dplyr::left_join(
+        read.csv((file.path(project_paths$data_raw_analysis, seq_id_, 'CompletedSampleSheet.tsv')), sep = '\t') %>%
+          dplyr::select(subject, flags, sample, replicate),
+        by = c('sample', 'replicate')
+      ) %>%
+      dplyr::select(sample, replicate, demultiplexedReads, subject, flags) %>%
+      dplyr::mutate(run_ID = seq_id_)
+    
+    df_reads <- rbind(df_reads, df_temp) 
+    
+    }
+}
+
+df_reads <- df_reads %>%
+  dplyr::left_join(
+    df_metadata %>%
+      dplyr::rename(subject = specimen),
+    by = c('run_ID', 'subject')
+  )
+
+
+for (df_plot in dplyr::group_split(df_reads, run_ID)) {
+  
+  # df_plot <- dplyr::group_split(df_reads, run_ID)[[2]]
+  
+  df_plot <- df_plot %>%
+    dplyr::mutate(
+      x_label = paste0(patient, "\n(", annotation, ")")
+    )
+  
+  p1 <- ggplot(df_plot, aes(x = x_label, y = demultiplexedReads, fill = flags)) +
+    # ggh4x::facet_grid2(. ~ subject, space = 'free', scales = 'free') +
+    geom_boxplot(fill = 'transparent', outlier.shape = NA) + 
+    # Note: log scales and bars can be tricky; ensures bars start from 1, not 0
+    geom_point(stat = 'identity', position = position_jitterdodge(seed = 2), shape = 21) +
+    
+    # 1. Apply log10 scale
+    # 2. Use comma_format to show full numbers (e.g., 1,000,000)
+      scale_y_log10(
+        labels = scales::label_comma(),
+        breaks = scales::trans_breaks("log10", function(x) 10^x),
+        minor_breaks = scales::trans_breaks("log10", function(x) 10^x, n = 10)
+      ) +
+      
+      # 2. Add the log tick marks to the left axis
+      annotation_logticks(sides = "l") +
+    
+    theme_cowplot() +
+    theme(
+      legend.position = 'bottom',
+      legend.title = element_blank(),
+      strip.background = element_rect(fill = 'grey94'),
+      axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, lineheight = 0.9),
+      axis.title.x = element_blank(),
+      text = element_text(size = 10),
+      panel.grid.major.y = element_line(color = "black", size = 0.2),
+      plot.title = element_text(hjust = 0.5)
+    ) +
+    labs(
+      title = paste0("Demultiplexed Reads: ", base::unique(df_plot$run_ID)), 
+      y = "Reads (log10)"
+    ) +
+    scale_fill_brewer(palette = 'Set1')
+  
+  print(p1)
+}
+
+```
+
+# Annotate features and hotrocs
+
+```{r load_sites}
+rm(list = list_non_global_variables(ls(), keep_global_vars))
+
+overwrite_ <- F
+
+if (overwrite_) {
+
+  feature_files <- Sys.glob(file.path(project_paths$data_processed, 'hs1', '*.rds'))
+  
+  df_sites_test_inputs <- read.csv(file.path(project_paths$data_processed_analysis, 'wu_hiv_hs1.csv')) %>%
+    dplyr::filter(!is.na(sonicLengths)) %>%
+    dplyr::mutate(
+      trial = condition,
+      subject = patient
+    ) %>%
+    InvestigateIntegrations::format_aavenger_sites()
+
+  df_samples_missing <- read.csv(file.path(project_paths$data_processed_analysis, 'wu_hiv_hs1.csv')) %>%
+    dplyr::filter(is.na(sonicLengths))
+  
+  # genomic_sequence <- Biostrings::readDNAStringSet(file.path(project_paths$data_processed, 'hs1', 'hs1.fasta.gz'))
+  
+  # Format for InvInt hotROCs workflow
+  df_sites_test_inputs <- df_sites %>%
+    dplyr::mutate(
+      ) %>%
+    InvestigateIntegrations::format_aavenger_sites()
+  
+  # Make random matched dataframe
+  random_match_df <- InvestigateIntegrations::aavenger_sites_random_match(
+    aavenger_sites = df_sites_test_inputs,
+    chromosome_lengths = chromosome_lengths,
+    random_seed_value = 10,
+    match_row_number_modifier = 3
+  )
+  
+  combined_df <- rbind(df_sites_test_inputs, random_match_df)  
+  
+  View(combined_df%>%dplyr::group_by(heatmap_group, type)%>%dplyr::summarize(count = dplyr::n()))
+  
+  function (matched_overlap_df) 
+  {
+    hot_roc_result <- hotROCs::ROC.ORC(response = matched_overlap_df$type, 
+      variables = matched_overlap_df %>% dplyr::select(-c(seqname, 
+        start, end, width, strand, mid, type, heatmap_group)), 
+      origin = matched_overlap_df$heatmap_group)
+    return(hot_roc_result)
+  }
+  
+  
+  # ----- GENOMIC FEATURES ----- #
+  df_combined <- combined_df %>% #dplyr::filter(heatmap_group %in% c('ignore_pJH0301_GTSP4781', 'ignore_pJH0302_GTSP3791')) %>%
+    dplyr::mutate(heatmap_group = as.factor(heatmap_group))
+  
+  # test each integration site for overlap in each feature at each given overlap 
+  combined_overlap_test_results_genomic_ranges <- InvestigateIntegrations::test_for_overlaps(
+    matched_aavenger_sites_df = df_combined,
+    list_of_feature_files = feature_files,#[28],
+    overlap_ranges_to_test = c(0, 100, 1000, 10000, 1000000)
+    )
+  
+  # rownames(combined_overlap_test_results_genomic_ranges) <- seq(1, nrow(combined_overlap_test_results_genomic_ranges))
+  df_remove <- combined_overlap_test_results_genomic_ranges %>%
+    dplyr::group_by(type, heatmap_group) %>%
+    dplyr::summarize(count = dplyr::n()) %>%
+    dplyr::filter(type == 'insertion', count < 10)
+  
+  combined_overlap_test_results_genomic_ranges <- combined_overlap_test_results_genomic_ranges %>%
+    dplyr::filter(!heatmap_group %in% df_remove$heatmap_group) %>%
+    dplyr::mutate(
+      heatmap_group = as.factor(heatmap_group),
+      type = as.factor(type)
+      )
+  
+  hot_roc_result <- InvestigateIntegrations::hotroc_compare_insertion_to_match(
+    matched_overlap_df = combined_overlap_test_results_genomic_ranges
+    )
+  
+  # format and store result
+  formatted_hot_roc_result <- InvestigateIntegrations::format_hot_roc_result(hot_roc_result)
+  
+  saveRDS(formatted_hot_roc_result, file.path(project_paths$data_interim_analysis, 'feature_hotrocs.rds'))
+  
+  
+  
+  ## ----- GC CONTENT ----- #
+  combined_gc_content_result <- InvestigateIntegrations::GC_percentage_per_insertion(
+    df_combined = df_combined,
+    genomic_sequence = genomic_sequence,
+    window_sizes_to_test = c(50, 100, 500, 1000, 10000),
+    chromosome_lengths = chromosome_lengths,
+    fasta_name = 'genome'
+    ) 
+  
+  combined_gc_content_result <- combined_gc_content_result %>%
+    dplyr::filter(
+      !is.na(genome_gc.fasta.50),
+      !is.na(genome_gc.fasta.100),
+      !is.na(genome_gc.fasta.1000),
+      !is.na(genome_gc.fasta.10000)
+      )
+  
+  combined_gc_content_result <- combined_gc_content_result %>%
+    dplyr::filter(!heatmap_group %in% df_remove$heatmap_group) %>%
+    dplyr::mutate(
+      heatmap_group = as.factor(heatmap_group),
+      type = as.factor(type)
+      )
+  
+  hot_roc_result_gc <- InvestigateIntegrations::hotroc_compare_insertion_to_match(
+    matched_overlap_df = combined_gc_content_result
+    )
+  # format and store result
+  formatted_hot_roc_result_gc <-  InvestigateIntegrations::format_hot_roc_result(hot_roc_result_gc)
+  
+  saveRDS(formatted_hot_roc_result_gc, file.path(project_paths$data_interim_analysis, 'gc_hotrocs.rds'))
+  
+  }
+
+```
