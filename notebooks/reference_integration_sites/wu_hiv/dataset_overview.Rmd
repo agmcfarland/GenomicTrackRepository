@@ -81,10 +81,33 @@ rm(list = list_non_global_variables(ls(), keep_global_vars))
 
 df_sites <- read.csv(file.path(project_paths$data_processed_analysis, 'wu_hiv_hs1.csv')) %>%
   dplyr::filter(!is.na(sonicLengths)) %>%
+  dplyr::group_by(patient, specimen, posid) %>%
+  dplyr::mutate(
+    sonicLengths = sum(sonicLengths),
+    reads = sum(reads),
+    nRepsObs = sum(nRepsObs),
+    flags = paste(sort(base::unique(flags)), collapse= '-')
+    ) %>%
+  dplyr::ungroup() %>%
+  dplyr::select(-c(sample, repLeaderSeq, percentSampleRelAbund)) %>%
+  dplyr::distinct() %>%
   dplyr::mutate(
     trial = condition,
-    subject = patient
+    subject = patient,
+    sample = annotation
   )
+
+```
+
+# Table layouts
+
+```{r}
+
+df_breakdown <- df_sites %>%
+  dplyr::select(trial, subject, compartment, cell_type) %>%
+  dplyr::distinct() %>%
+  dplyr::arrange(trial, subject, compartment, cell_type)
+
 
 ```
 
@@ -184,7 +207,7 @@ for (df_plot in dplyr::group_split(df_reads, run_ID)) {
 
 # Annotate features and hotrocs
 
-```{r load_sites}
+```{r load_sites, fig.width = 15, fig.height=15}
 rm(list = list_non_global_variables(ls(), keep_global_vars))
 
 overwrite_ <- F
@@ -193,24 +216,31 @@ if (overwrite_) {
 
   feature_files <- Sys.glob(file.path(project_paths$data_processed, 'hs1', '*.rds'))
   
-  df_sites_test_inputs <- read.csv(file.path(project_paths$data_processed_analysis, 'wu_hiv_hs1.csv')) %>%
-    dplyr::filter(!is.na(sonicLengths)) %>%
-    dplyr::mutate(
-      trial = condition,
-      subject = patient
-    ) %>%
-    InvestigateIntegrations::format_aavenger_sites()
+  feature_files <- feature_files[!feature_files %in% 
+                                   c("/data/GenomicTrackRepository/data/processed/hs1/expanded_ncbirefseqcurated.rds",
+                                     "/data/GenomicTrackRepository/data/processed/hs1/filtered_ncbirefseqcurated.rds"
+                                     )]
+  
+  df_sites_test_inputs <- df_sites %>%
+    # dplyr::group_by(specimen, posid) %>%
+    # dplyr::mutate(count = dplyr::n()) %>%
+    # dplyr::ungroup() %>%
+    # dplyr::select(specimen, posid, count) %>%
+    # dplyr::distinct()
+    # dplyr::mutate(
+    #   trial = condition,
+    #   subject = patient,
+    #   trial, subject, sample
+    # ) %>%
+    InvestigateIntegrations::format_aavenger_sites() #%>%
+    # dplyr::mutate(
+    #   run_ID = df_sites$run_ID
+    # )
 
-  df_samples_missing <- read.csv(file.path(project_paths$data_processed_analysis, 'wu_hiv_hs1.csv')) %>%
-    dplyr::filter(is.na(sonicLengths))
+  # df_samples_missing <- read.csv(file.path(project_paths$data_processed_analysis, 'wu_hiv_hs1.csv')) %>%
+  #   dplyr::filter(is.na(sonicLengths))
   
   # genomic_sequence <- Biostrings::readDNAStringSet(file.path(project_paths$data_processed, 'hs1', 'hs1.fasta.gz'))
-  
-  # Format for InvInt hotROCs workflow
-  df_sites_test_inputs <- df_sites %>%
-    dplyr::mutate(
-      ) %>%
-    InvestigateIntegrations::format_aavenger_sites()
   
   # Make random matched dataframe
   random_match_df <- InvestigateIntegrations::aavenger_sites_random_match(
@@ -222,45 +252,44 @@ if (overwrite_) {
   
   combined_df <- rbind(df_sites_test_inputs, random_match_df)  
   
-  View(combined_df%>%dplyr::group_by(heatmap_group, type)%>%dplyr::summarize(count = dplyr::n()))
-  
-  function (matched_overlap_df) 
-  {
-    hot_roc_result <- hotROCs::ROC.ORC(response = matched_overlap_df$type, 
-      variables = matched_overlap_df %>% dplyr::select(-c(seqname, 
-        start, end, width, strand, mid, type, heatmap_group)), 
-      origin = matched_overlap_df$heatmap_group)
-    return(hot_roc_result)
-  }
+  df_keep <- combined_df %>%
+    dplyr::group_by(heatmap_group, type) %>% 
+    dplyr::summarize(count = dplyr::n()) %>%
+    dplyr::filter(type == 'insertion' & count > 10, stringr::str_detect(heatmap_group, '69')) 
   
   
   # ----- GENOMIC FEATURES ----- #
-  df_combined <- combined_df %>% #dplyr::filter(heatmap_group %in% c('ignore_pJH0301_GTSP4781', 'ignore_pJH0302_GTSP3791')) %>%
+  df_combined <- combined_df %>% #
+    dplyr::filter(heatmap_group %in% df_keep$heatmap_group) %>%
+    # dplyr::filter(heatmap_group %in% c('ignore_pJH0301_GTSP4781', 'ignore_pJH0302_GTSP3791')) %>%
     dplyr::mutate(heatmap_group = as.factor(heatmap_group))
   
   # test each integration site for overlap in each feature at each given overlap 
   combined_overlap_test_results_genomic_ranges <- InvestigateIntegrations::test_for_overlaps(
     matched_aavenger_sites_df = df_combined,
-    list_of_feature_files = feature_files,#[28],
-    overlap_ranges_to_test = c(0, 100, 1000, 10000, 1000000)
+    list_of_feature_files = feature_files,#[1:2],
+    overlap_ranges_to_test = c(0, 100, 1000) #, 1000, 10000, 1000000)
     )
   
   # rownames(combined_overlap_test_results_genomic_ranges) <- seq(1, nrow(combined_overlap_test_results_genomic_ranges))
-  df_remove <- combined_overlap_test_results_genomic_ranges %>%
-    dplyr::group_by(type, heatmap_group) %>%
-    dplyr::summarize(count = dplyr::n()) %>%
-    dplyr::filter(type == 'insertion', count < 10)
+  # df_remove <- combined_overlap_test_results_genomic_ranges %>%
+  #   dplyr::group_by(type, heatmap_group) %>%
+  #   dplyr::summarize(count = dplyr::n()) %>%
+  #   dplyr::filter(type == 'insertion', count < 10)
   
   combined_overlap_test_results_genomic_ranges <- combined_overlap_test_results_genomic_ranges %>%
-    dplyr::filter(!heatmap_group %in% df_remove$heatmap_group) %>%
+    # dplyr::filter(!heatmap_group %in% df_remove$heatmap_group) %>%
     dplyr::mutate(
-      heatmap_group = as.factor(heatmap_group),
+      # heatmap_group = as.factor(heatmap_group),
       type = as.factor(type)
       )
   
   hot_roc_result <- InvestigateIntegrations::hotroc_compare_insertion_to_match(
     matched_overlap_df = combined_overlap_test_results_genomic_ranges
     )
+  
+  InvestigateIntegrations::roc_to_heatmap(hot_roc_result) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 5))
   
   # format and store result
   formatted_hot_roc_result <- InvestigateIntegrations::format_hot_roc_result(hot_roc_result)
@@ -287,7 +316,7 @@ if (overwrite_) {
       )
   
   combined_gc_content_result <- combined_gc_content_result %>%
-    dplyr::filter(!heatmap_group %in% df_remove$heatmap_group) %>%
+    # dplyr::filter(!heatmap_group %in% df_remove$heatmap_group) %>%
     dplyr::mutate(
       heatmap_group = as.factor(heatmap_group),
       type = as.factor(type)
