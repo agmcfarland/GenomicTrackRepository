@@ -21,6 +21,7 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE, echo = FALSE)
 library(dplyr)
 library(ggplot2)
 library(scales)
+library(kableExtra)
 
 project_dir <- '/data/GenomicTrackRepository'
 invisible(sapply(list.files(file.path(project_dir, 'src/Rlib'), pattern="utils.R|site_jitter.R", full.names = TRUE), source))
@@ -104,11 +105,45 @@ df_sites <- read.csv(file.path(project_paths$data_processed_analysis, 'wu_hiv_hs
 ```{r}
 
 df_breakdown <- df_sites %>%
-  dplyr::select(trial, subject, compartment, cell_type) %>%
+  dplyr::select(trial, subject, compartment, cell_type, sonicLengths, posid) %>%
   dplyr::distinct() %>%
-  dplyr::arrange(trial, subject, compartment, cell_type)
+  dplyr::group_by(trial, subject, compartment, cell_type) %>%
+  dplyr::mutate(cell_type_unique = dplyr::n(), cell_type_clones = sum(sonicLengths)) %>%
+  dplyr::ungroup() %>%
+  dplyr::group_by(trial, subject, compartment) %>%
+  dplyr::mutate(
+    compartment_unique = dplyr::n(), compartment_clones = sum(sonicLengths), compartment_shared_unique = dplyr::n_distinct(posid)
+  ) %>%
+  dplyr::ungroup() %>%
+  dplyr::group_by(trial, subject) %>%
+  dplyr::mutate(
+    subject_unique = dplyr::n(), subject_clones = sum(sonicLengths), subject_shared_unique = dplyr::n_distinct(posid)
+  ) %>%
+  dplyr::select(trial, subject, compartment, cell_type,
+                cell_type_unique, cell_type_clones,
+                compartment_unique, compartment_clones, compartment_shared_unique,
+                subject_unique, subject_clones, subject_shared_unique
+                ) %>%
+  dplyr::distinct() %>%
+  dplyr::arrange(trial, subject, compartment, cell_type) 
 
 
+
+for (trial_ in base::unique(df_breakdown$trial)) {
+
+  t1 <- df_breakdown %>%
+    dplyr::filter(trial  == trial_) %>%
+    kableExtra::kbl(booktabs = T) %>%
+    kableExtra::collapse_rows(columns = c(1, 2, 3, 7, 8, 9, 10, 11, 12), valign = "middle") %>%
+    kableExtra::column_spec(1:3,border_left = T, border_right = T) %>%
+    kableExtra::kable_styling(latex_options = "striped", full_width = FALSE)
+    # column_spec(2, border_right = TRUE)
+
+  kableExtra::save_kable(
+    x = t1, 
+    file = file.path(project_paths$data_processed_analysis, paste0(trial_, '_integration_site_overview_count_table.pdf')))
+  
+  }
 ```
 
 # Description
