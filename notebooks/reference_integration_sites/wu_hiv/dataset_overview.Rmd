@@ -98,6 +98,8 @@ df_sites <- read.csv(file.path(project_paths$data_processed_analysis, 'wu_hiv_hs
     sample = annotation
   )
 
+saveRDS(df_sites, file.path(project_paths$data_processed_analysis, 'wu_hiv_hs1_processed_sites.rds'))
+
 ```
 
 # Table layouts
@@ -257,20 +259,7 @@ if (overwrite_) {break}
                                      )]
   
   df_sites_test_inputs <- df_sites %>%
-    # dplyr::group_by(specimen, posid) %>%
-    # dplyr::mutate(count = dplyr::n()) %>%
-    # dplyr::ungroup() %>%
-    # dplyr::select(specimen, posid, count) %>%
-    # dplyr::distinct()
-    # dplyr::mutate(
-    #   trial = condition,
-    #   subject = patient,
-    #   trial, subject, sample
-    # ) %>%
-    InvestigateIntegrations::format_aavenger_sites() #%>%
-    # dplyr::mutate(
-    #   run_ID = df_sites$run_ID
-    # )
+    InvestigateIntegrations::format_aavenger_sites()
 
   # df_samples_missing <- read.csv(file.path(project_paths$data_processed_analysis, 'wu_hiv_hs1.csv')) %>%
   #   dplyr::filter(is.na(sonicLengths))
