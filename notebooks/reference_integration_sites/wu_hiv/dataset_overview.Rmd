@@ -201,7 +201,7 @@ for (df_plot in dplyr::group_split(df_reads, run_ID)) {
       x_label = paste0(patient, "\n(", annotation, ")")
     )
   
-  p1 <- ggplot(df_plot, aes(x = x_label, y = demultiplexedReads, fill = flags)) +
+  p1 <- ggplot(df_plot, aes(x = x_label, y = demultiplexedReads + 1, fill = flags)) +
     # ggh4x::facet_grid2(. ~ subject, space = 'free', scales = 'free') +
     geom_boxplot(fill = 'transparent', outlier.shape = NA) + 
     # Note: log scales and bars can be tricky; ensures bars start from 1, not 0
@@ -222,7 +222,7 @@ for (df_plot in dplyr::group_split(df_reads, run_ID)) {
     theme(
       legend.position = 'bottom',
       legend.title = element_blank(),
-      strip.background = element_rect(fill = 'grey94'),
+      # strip.background = element_rect(fill = 'grey94'),
       axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, lineheight = 0.9),
       axis.title.x = element_blank(),
       text = element_text(size = 10),
@@ -247,7 +247,7 @@ rm(list = list_non_global_variables(ls(), keep_global_vars))
 
 overwrite_ <- F
 
-if (overwrite_) {
+if (overwrite_) {break}
 
   feature_files <- Sys.glob(file.path(project_paths$data_processed, 'hs1', '*.rds'))
   
@@ -367,4 +367,88 @@ if (overwrite_) {
   
   }
 
+```
+
+
+```{r}
+
+
+p1_2 <- ggplot(df_roc_results_plot,
+       aes(y = window_size, x = sample, fill = ROC_value)) +
+  ggh4x::facet_grid2(
+    feature_description ~ cell_type + participant,
+    scales = "free", 
+    space = "free",
+    strip = ggh4x::strip_nested(),
+    switch = "y"  # 1. Moves the y-axis strip labels to the left side
+  ) +
+  geom_tile() +
+  geom_text(aes(label = sig_p_value), nudge_y = 0) +
+  coord_cartesian(clip = 'off') +
+  scale_fill_gradient2(midpoint = 0.5, low = "blue", mid = "white", high = "red") +
+  theme_classic() +
+  theme(
+    # 2. Ensures the horizontal orientation of the strip text
+    strip.text.y.left = element_text(angle = 0, size = 10, hjust = 0.5, face = 'bold'), 
+    strip.placement = "outside", # 3. Places strips outside the y-axis text
+    strip.clip = 'off',
+    strip.text.x.top = element_text(size = 15, face = 'bold'),
+    strip.background = element_rect(linetype = 'solid'),
+    
+    axis.ticks.x = element_blank(),
+    axis.ticks.y.left = element_blank(),
+    # 4. Standard y-axis text formatting
+    axis.text.y.left = element_text(size = 8, hjust = 1), 
+    axis.text.x = element_text(size = 15, angle = 45, hjust = 1, vjust = 1),
+    axis.title = element_blank(),
+    axis.line = element_blank(),
+    
+    legend.position = 'bottom',
+    legend.title = element_text(face = 'bold', size = 15),
+    legend.text = element_text(size = 15)
+  ) +
+  labs(fill = 'ROC') +
+  # 5. Remove 'position = "right"' to keep axis text on the left
+  scale_y_discrete() + 
+  guides(
+    fill = guide_colourbar(
+      barwidth = 30, 
+      label.position = 'bottom', 
+      title.position = 'left', 
+      title.vjust = 0.9, 
+      title.hjust = -0.1,
+      frame.colour = 'black'
+    )
+  )
+
+p2 <- ggplot(df_roc_results_plot,
+             aes(x = feature_description, y = ROC_value, color = cell_type, group = cell_type)) +
+  ggh4x::facet_grid2(
+    window_size ~ .,
+    scales = "free_y"
+  ) +
+  
+  geom_point(position = position_jitterdodge(seed = 3, jitter.width = 0.05, dodge.width = 0.3), alpha = 0.4) +
+  
+  stat_summary(
+    fun = mean, 
+    geom = "crossbar",
+    width = 0.5,
+    show.legend = FALSE,
+    aes(group = cell_type),
+    position = position_dodge(width=0.3)
+    ) +
+  stat_summary(
+    fun.data = mean_cl_normal, # or mean_cl_normal for non-bootstrapped
+    geom = "errorbar", 
+    width = 0.5,
+    aes(group = cell_type),
+    position = position_dodge(width=0.3)
+  ) +
+  
+  theme_classic() +
+  theme(
+    legend.position = 'bottom',
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)
+  )
 ```
