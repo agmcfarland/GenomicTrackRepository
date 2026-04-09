@@ -80,6 +80,7 @@ keep_global_vars <- c(keep_global_vars, internal_functions)
 ```{r}
 rm(list = list_non_global_variables(ls(), keep_global_vars))
 
+# Condensed sample replicates
 df_sites <- read.csv(file.path(project_paths$data_processed_analysis, 'wu_hiv_hs1.csv')) %>%
   dplyr::filter(!is.na(sonicLengths)) %>%
   dplyr::group_by(patient, specimen, posid) %>%
