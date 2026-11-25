@@ -15,7 +15,7 @@ conda_path <- '/home/ubuntu/miniconda3/condabin/conda'
 
 genome <- 'hs1'
 
-dir.create(file.path(project_paths$data_raw, genome))
+dir.create(file.path(project_paths$data_raw, genome), showWarnings = F)
 
 system(
   command = paste0(
@@ -30,21 +30,67 @@ system(
   )
 
 
-df_raw_table <- vroom::vroom(file = file.path(project_paths$data_raw, genome, 'ncbiRefSeq.bed'), col_names = FALSE, delim = '\t')
-colnames(df_raw_table) <- c('bin', 'name', 'chrom', 'strand', 'txStart', 'txEnd', 'cdsStart', 'cdsEnd', 'exonCount',
-                            'exonStarts', 'exonEnds', 'score', 'name2', 'cdsStartStat', 'cdsEndStat', 'exonFrames')
+df_raw_table <- read.csv(file = file.path(project_paths$data_raw, genome, 'ncbiRefSeq.bed'), header = FALSE, sep = '\t') # vroom::vroom(file = file.path(project_paths$data_raw, genome, 'ncbiRefSeq.bed'), col_names = FALSE, delim = '\t')
+# colnames(df_raw_table) <- c('bin', 'name', 'chrom', 'strand', 'txStart', 'txEnd', 'cdsStart', 'cdsEnd', 'exonCount',
+#                             'exonStarts', 'exonEnds', 'score', 'name2', 'cdsStartStat', 'cdsEndStat', 'exonFrames')
+colnames(df_raw_table) <- c("chrom",
+                            'chromStart', #"chromStart",
+                            'chromEnd', #"chromEnd",
+                            "name",
+                            "score",
+                            "strand",
+                            'thickStart', #"thickStart",
+                            'thickEnd', #"thickEnd",
+                            "reserved",
+                            'blockCount', #"blockCount",
+                            'blockSizes', #"blockSizes",
+                            'chromStarts', #"chromStarts",
+                            "name2",
+                            "cdsStartStat",
+                            "cdsEndStat",
+                            "exonFrames",
+                            "type",
+                            "geneName",
+                            "geneName2",
+                            "geneType"
+                            )
+# 
+# # View(df_raw_table)
+# ## InvestigateIntegrations::extend_raw_refseq_table() work flow input START
+# df_raw_table_invint <- df_raw_table %>%
+#   dplyr::filter(!stringr::str_detect(chrom, '_random|_alt|chrUn|_fix'))
+# 
+# saveRDS(df_raw_table_invint, file.path(project_paths$data_processed, 'hs1', 'filtered_ncbirefseqcurated.rds'))
+# 
+# 
+# # Extend refseq table
+# df_processed_table <- InvestigateIntegrations::extend_raw_refseq_table(readRDS(file.path(project_paths$data_processed, 'hs1', 'filtered_ncbirefseqcurated.rds')))
+# 
+# df_processed_table <- df_processed_table %>%
+#   dplyr::left_join( 
+#     df_raw_table_invint %>%
+#       dplyr::select(chrom, name, name2),
+#     by = c('chrom', 'name')
+#   )
+# 
+# # Store processed table results
+# saveRDS(df_processed_table, file.path(project_paths$data_processed, 'hs1', 'expanded_ncbirefseqcurated.rds'))
+# 
+# ## InvestigateIntegrations::extend_raw_refseq_table() work flow input END
+
+# Resume other methods of extracting info
 
 df_raw_table <- df_raw_table %>%
-  dplyr::filter(!stringr::str_detect(chrom, '_random|_alt|chrUn|_fix')) %>%
-  dplyr::mutate(strand = '*')
+  dplyr::filter(!stringr::str_detect(chrom, '_random|_alt|chrUn|_fix')) #%>%
+  # dplyr::mutate(strand = '*')
 
 # Transcription start and stop
 grange_raw_table <- df_raw_table %>%
-  dplyr::select(txStart, txEnd, chrom, name, name2) %>%
-  dplyr::mutate(strand = '*') %>%
+  dplyr::select(chromStart, chromEnd, chrom, name, name2, strand) %>%
+  # dplyr::mutate(strand = '*') %>%
   dplyr::rename(
-    start = txStart,
-    end = txEnd
+    start = chromStart,
+    end = chromEnd
   ) %>%
   GenomicRanges::makeGRangesFromDataFrame(keep.extra.columns = TRUE)
 
@@ -52,22 +98,22 @@ saveRDS(grange_raw_table, file = file.path(project_paths$data_processed, 'hs1', 
 
 # Transcription start site
 grange_raw_table <- df_raw_table %>%
-  dplyr::select(txStart, txEnd, chrom, strand, name, name2) %>%
+  dplyr::select(chromStart, chromEnd, chrom, strand, name, name2) %>%
   dplyr::mutate(
-    start = ifelse(strand == '+', txStart, txEnd),
+    start = ifelse(strand == '+', chromStart, chromEnd),
     end = start + 1) %>%
-  dplyr::select(-c(txStart, txEnd)) %>%
+  dplyr::select(-c(chromStart, chromEnd)) %>%
   GenomicRanges::makeGRangesFromDataFrame(keep.extra.columns = TRUE)
 
 saveRDS(grange_raw_table, file = file.path(project_paths$data_processed, 'hs1', 'ncbiRefSeqCurated_transcription_start.rds'))
 
 # Transcription start and stop
 grange_raw_table <- df_raw_table %>%
-  dplyr::select(txStart, txEnd, chrom, name, name2) %>%
-  dplyr::mutate(strand = '*') %>%
+  dplyr::select(chromStart, chromEnd, chrom, name, name2) %>%
+  # dplyr::mutate(strand = '*') %>%
   dplyr::rename(
-    start = txStart,
-    end = txEnd
+    start = chromStart,
+    end = chromEnd
   ) %>%
   GenomicRanges::makeGRangesFromDataFrame(keep.extra.columns = TRUE) %>%
   IRanges::reduce()
@@ -76,11 +122,11 @@ saveRDS(grange_raw_table, file = file.path(project_paths$data_processed, 'hs1', 
 
 # Transcription start site
 grange_raw_table <- df_raw_table %>%
-  dplyr::select(txStart, txEnd, chrom, strand, name, name2) %>%
+  dplyr::select(chromStart, chromEnd, chrom, strand, name, name2) %>%
   dplyr::mutate(
-    start = ifelse(strand == '+', txStart, txEnd),
+    start = ifelse(strand == '+', chromStart, chromEnd),
     end = start + 1) %>%
-  dplyr::select(-c(txStart, txEnd)) %>%
+  dplyr::select(-c(chromStart, chromEnd)) %>%
   GenomicRanges::makeGRangesFromDataFrame(keep.extra.columns = TRUE)
 
 saveRDS(grange_raw_table, file = file.path(project_paths$data_processed, 'hs1', 'ncbiRefSeqCurated_transcription_start_reduced.rds'))

@@ -17,11 +17,13 @@ df_refseq <- readRDS(file.path(project_paths$data_processed, 'hg38', 'ncbiRefSeq
     chromosome = seqnames
     )
 
-# Presence absence features
+# Gene component annotations
 for (feature_ in c('exon', 'intron', '3UTR', '5UTR')) {
   df_feature_ <- df_refseq %>%
     dplyr::filter(feature == feature_) %>%
-    dplyr::select(chromosome, start, end, feature)
+    dplyr::rename(annotation = feature) %>% 
+    dplyr::select(chromosome, start, end, annotation) %>% 
+    base::unique()
   
   write.csv(
     df_feature_,
@@ -33,7 +35,8 @@ for (feature_ in c('exon', 'intron', '3UTR', '5UTR')) {
 # Named features
 df_feature_ <- df_refseq %>%
   dplyr::select(chromosome, start, end, name2) %>%
-  dplyr::rename(annotation = name2)
+  dplyr::rename(annotation = name2) %>% 
+  base::unique()
 
 write.csv(
   df_feature_, 
@@ -47,10 +50,27 @@ df_feature_ <- readRDS(file.path(project_paths$data_processed, 'hg38', 'Cosmic_C
     chromosome = seqnames,
     annotation = gene_symbol
   ) %>%
-  dplyr::select(chromosome, start, end, annotation)
+  dplyr::select(chromosome, start, end, annotation) %>% 
+  base::unique()
 
 write.csv(
   df_feature_, 
   file.path(project_paths$data_processed, 'hg38', paste0('crisprito_', 'oncogene', '.csv')),
+  row.names = F
+)
+
+# cCRE
+df_ccre <- readRDS(file.path(project_paths$data_processed, 'hg38', 'encode_ccre_all.rds')) %>%
+  as.data.frame() %>%
+  dplyr::rename(
+    chromosome = seqnames,
+    annotation = ucscLabel
+  ) %>%
+  dplyr::select(chromosome, start, end, annotation) %>% 
+  base::unique()
+
+write.csv(
+  df_ccre, 
+  file.path(project_paths$data_processed, 'hg38', paste0('crisprito_', 'encode_ccre_all', '.csv')),
   row.names = F
 )
